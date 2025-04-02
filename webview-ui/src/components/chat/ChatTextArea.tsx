@@ -710,6 +710,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [isTtsPlaying, setIsTtsPlaying] = useState(false)
 
 		useEvent("message", (event: MessageEvent) => {
+			console.log(event)
 			const message: ExtensionMessage = event.data
 
 			if (message.type === "ttsStart") {

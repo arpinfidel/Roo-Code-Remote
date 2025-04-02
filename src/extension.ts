@@ -23,6 +23,7 @@ import { telemetryService } from "./services/telemetry/TelemetryService"
 import { TerminalRegistry } from "./integrations/terminal/TerminalRegistry"
 import { API } from "./exports/api"
 import { migrateSettings } from "./utils/migrateSettings"
+import { WebSocketApiAdapter } from "./services/websocket/api-adapter"
 
 import { handleUri, registerCommands, registerCodeActions, registerTerminalActions } from "./activate"
 import { formatLanguage } from "./shared/language"
@@ -37,6 +38,7 @@ import { formatLanguage } from "./shared/language"
 
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
+let webSocketAdapter: WebSocketApiAdapter | null = null
 
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
@@ -68,6 +70,20 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const provider = new ClineProvider(context, outputChannel, "sidebar")
 	telemetryService.setProvider(provider)
+
+	// Initialize WebSocket connection if configured
+	const config = vscode.workspace.getConfiguration("roo-cline")
+	if (config.get("websocket.serverUrl")) {
+		const api = new API(outputChannel, provider)
+		outputChannel.appendLine(`Initializing WebSocket connection to ${config.get("websocket.serverUrl")}`)
+		webSocketAdapter = new WebSocketApiAdapter(api, {
+			serverUrl: config.get("websocket.serverUrl") || "",
+			authToken: config.get("websocket.authToken") || "",
+			reconnectInterval: config.get("websocket.reconnectInterval", 5000),
+			maxRetries: config.get("websocket.maxRetries", 5),
+		})
+		provider.on("messageToWebview", webSocketAdapter.forwardMessageEvent.bind(webSocketAdapter))
+	}
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(ClineProvider.sideBarId, provider, {
@@ -116,7 +132,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerTerminalActions(context)
 
 	// Allows other extensions to activate once Roo is ready.
-	vscode.commands.executeCommand('roo-cline.activationCompleted');
+	vscode.commands.executeCommand("roo-cline.activationCompleted")
 
 	// Implements the `RooCodeAPI` interface.
 	return new API(outputChannel, provider)
@@ -131,4 +147,9 @@ export async function deactivate() {
 
 	// Clean up terminal handlers
 	TerminalRegistry.cleanup()
+
+	// Clean up WebSocket connection
+	if (webSocketAdapter) {
+		webSocketAdapter = null
+	}
 }

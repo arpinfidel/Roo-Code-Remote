@@ -6,6 +6,7 @@ import { ExtensionMessage } from "../../src/shared/ExtensionMessage"
 import TranslationProvider from "./i18n/TranslationContext"
 
 import { vscode } from "./utils/vscode"
+import { useWs } from "./context/ws-context"
 import { telemetryClient } from "./utils/TelemetryClient"
 import { ExtensionStateContextProvider, useExtensionState } from "./context/ExtensionStateContext"
 import ChatView from "./components/chat/ChatView"
@@ -15,6 +16,13 @@ import WelcomeView from "./components/welcome/WelcomeView"
 import McpView from "./components/mcp/McpView"
 import PromptsView from "./components/prompts/PromptsView"
 import { HumanRelayDialog } from "./components/human-relay/HumanRelayDialog"
+
+// Mock vscode API when not in VSCode
+if (typeof acquireVsCodeApi === "undefined") {
+	window.vscode = {
+		postMessage: (msg: any) => console.log("Standalone mode:", msg),
+	}
+}
 
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 
@@ -88,8 +96,18 @@ const App = () => {
 		}
 	}, [telemetrySetting, telemetryKey, machineId, didHydrateState])
 
-	// Tell the extension that we are ready to receive messages.
-	useEffect(() => vscode.postMessage({ type: "webviewDidLaunch" }), [])
+	// Initialize connection based on environment
+	const { connect } = useWs()
+	useEffect(() => {
+		if (typeof acquireVsCodeApi !== "undefined") {
+			// VSCode environment
+			vscode.postMessage({ type: "webviewDidLaunch" })
+		} else {
+			console.log("Standalone mode, connecting to ws://localhost:8080")
+			// Standalone mode - connect to WebSocket
+			connect("ws://localhost:8080").catch(console.error)
+		}
+	}, [connect])
 
 	if (!didHydrateState) {
 		return null

@@ -32,8 +32,16 @@ class VSCodeAPIWrapper {
 	public postMessage(message: WebviewMessage) {
 		if (this.vsCodeApi) {
 			this.vsCodeApi.postMessage(message)
+		} else if (window.wsClient) {
+			// In standalone mode, send via WebSocket
+			window.wsClient
+				.send({
+					type: "vscode-message",
+					payload: message,
+				})
+				.catch(console.error)
 		} else {
-			console.log(message)
+			console.log("No connection available:", message)
 		}
 	}
 

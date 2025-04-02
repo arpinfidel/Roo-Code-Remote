@@ -303,6 +303,26 @@
 					"type": "string",
 					"default": "",
 					"description": "Custom storage path. Leave empty to use the default location. Supports absolute paths (e.g. 'D:\\RooCodeStorage')"
+				},
+				"roo-cline.websocket.serverUrl": {
+					"type": "string",
+					"default": "",
+					"description": "WebSocket server URL for remote control (e.g. 'wss://example.com/ws')"
+				},
+				"roo-cline.websocket.authToken": {
+					"type": "string",
+					"default": "",
+					"description": "Authentication token for WebSocket connection"
+				},
+				"roo-cline.websocket.reconnectInterval": {
+					"type": "number",
+					"default": 5000,
+					"description": "Reconnection interval in milliseconds"
+				},
+				"roo-cline.websocket.maxRetries": {
+					"type": "number",
+					"default": 5,
+					"description": "Maximum reconnection attempts"
 				}
 			}
 		}
@@ -422,6 +442,7 @@
 		"@types/jest": "^29.5.14",
 		"@types/node": "20.x",
 		"@types/string-similarity": "^4.0.2",
+		"@types/ws": "^8.18.1",
 		"@typescript-eslint/eslint-plugin": "^7.14.1",
 		"@typescript-eslint/parser": "^7.11.0",
 		"esbuild": "^0.24.0",
