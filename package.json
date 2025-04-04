@@ -81,6 +81,11 @@
 		},
 		"commands": [
 			{
+				"command": "roo-cline.copySessionLink",
+				"title": "Roo Code: Copy Remote Session Link to Clipboard",
+				"category": "Roo Code"
+			},
+			{
 				"command": "roo-cline.plusButtonClicked",
 				"title": "New Task",
 				"icon": "$(add)"
@@ -303,6 +308,26 @@
 					"type": "string",
 					"default": "",
 					"description": "Custom storage path. Leave empty to use the default location. Supports absolute paths (e.g. 'D:\\RooCodeStorage')"
+				},
+				"roo-cline.websocket.serverUrl": {
+					"type": "string",
+					"default": "",
+					"description": "WebSocket server URL for remote control (e.g. 'wss://example.com/ws')"
+				},
+				"roo-cline.websocket.authToken": {
+					"type": "string",
+					"default": "",
+					"description": "Authentication token for WebSocket connection"
+				},
+				"roo-cline.websocket.reconnectInterval": {
+					"type": "number",
+					"default": 5000,
+					"description": "Reconnection interval in milliseconds"
+				},
+				"roo-cline.websocket.maxRetries": {
+					"type": "number",
+					"default": 5,
+					"description": "Maximum reconnection attempts"
 				}
 			}
 		}
@@ -377,6 +402,7 @@
 		"delay": "^6.0.0",
 		"diff": "^5.2.0",
 		"diff-match-patch": "^1.0.5",
+		"dotenv": "^16.4.7",
 		"fast-deep-equal": "^3.1.3",
 		"fast-xml-parser": "^4.5.1",
 		"fastest-levenshtein": "^1.0.16",
@@ -409,6 +435,7 @@
 		"tree-sitter-wasms": "^0.1.11",
 		"turndown": "^7.2.0",
 		"web-tree-sitter": "^0.22.6",
+		"ws": "^8.18.1",
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {
@@ -422,6 +449,7 @@
 		"@types/jest": "^29.5.14",
 		"@types/node": "20.x",
 		"@types/string-similarity": "^4.0.2",
+		"@types/ws": "^8.18.1",
 		"@typescript-eslint/eslint-plugin": "^7.14.1",
 		"@typescript-eslint/parser": "^7.11.0",
 		"esbuild": "^0.24.0",

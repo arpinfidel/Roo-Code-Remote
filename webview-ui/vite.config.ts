@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs"
 
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
@@ -6,7 +7,18 @@ import tailwindcss from "@tailwindcss/vite"
 
 // https://vitejs.dev/config/
 export default defineConfig({
-	plugins: [react(), tailwindcss()],
+	plugins: [
+		react(),
+		tailwindcss(),
+		{
+			name: "copy-codicons-font",
+			writeBundle() {
+				const fontSrc = path.resolve(__dirname, "../node_modules/@vscode/codicons/dist/codicon.ttf")
+				const fontDest = path.resolve(__dirname, "public/codicon.ttf")
+				fs.copyFileSync(fontSrc, fontDest)
+			},
+		},
+	],
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
@@ -32,6 +44,14 @@ export default defineConfig({
 			origin: "*",
 			methods: "*",
 			allowedHeaders: "*",
+		},
+		fs: {
+			allow: [
+				// Search for workspace root
+				process.cwd(),
+				// Allow serving files from codicons
+				path.resolve(__dirname, "../node_modules/@vscode/codicons"),
+			],
 		},
 	},
 	define: {

@@ -102,4 +102,8 @@ export class API extends EventEmitter<RooCodeEvents> implements RooCodeAPI {
 	public log(message: string) {
 		this.outputChannel.appendLine(message)
 	}
+
+	public getProvider() {
+		return this.provider
+	}
 }

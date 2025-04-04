@@ -77,6 +77,9 @@ export interface ExtensionMessage {
 		| "historyButtonClicked"
 		| "promptsButtonClicked"
 		| "didBecomeVisible"
+		| "popoutButtonClicked"
+		| "helpButtonClicked"
+		| "plusButtonClicked"
 	invoke?: "newChat" | "sendMessage" | "primaryButtonClick" | "secondaryButtonClick" | "setChatBoxMessage"
 	state?: ExtensionState
 	images?: string[]

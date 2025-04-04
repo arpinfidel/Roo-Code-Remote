@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client"
 
 import "./index.css"
 import App from "./App"
-import "../../node_modules/@vscode/codicons/dist/codicon.css"
+
+// Load codicons in both dev and prod
+import("@vscode/codicons/dist/codicon.css")
 
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>

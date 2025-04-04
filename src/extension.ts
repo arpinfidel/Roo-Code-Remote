@@ -23,9 +23,11 @@ import { telemetryService } from "./services/telemetry/TelemetryService"
 import { TerminalRegistry } from "./integrations/terminal/TerminalRegistry"
 import { API } from "./exports/api"
 import { migrateSettings } from "./utils/migrateSettings"
+import { WebSocketApiAdapter } from "./services/websocket/api-adapter"
 
 import { handleUri, registerCommands, registerCodeActions, registerTerminalActions } from "./activate"
 import { formatLanguage } from "./shared/language"
+import { randomUUID } from "crypto"
 
 /**
  * Built using https://github.com/microsoft/vscode-webview-ui-toolkit
@@ -37,6 +39,7 @@ import { formatLanguage } from "./shared/language"
 
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
+let webSocketAdapter: WebSocketApiAdapter | null = null
 
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
@@ -68,6 +71,44 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const provider = new ClineProvider(context, outputChannel, "sidebar")
 	telemetryService.setProvider(provider)
+
+	// Initialize WebSocket connection if configured
+	const config = vscode.workspace.getConfiguration("roo-cline")
+	if (config.get("websocket.serverUrl")) {
+		const api = new API(outputChannel, provider)
+		// Generate a unique session ID for this extension instance
+		const sessionId = randomUUID()
+		outputChannel.appendLine(
+			`Initializing WebSocket connection to ${config.get("websocket.serverUrl")} with session ID: ${sessionId}`,
+		)
+
+		// Store the session ID in global state for later use
+		context.globalState.update("websocketSessionId", sessionId)
+
+		webSocketAdapter = new WebSocketApiAdapter(api, {
+			serverUrl: config.get("websocket.serverUrl") || "",
+			authToken: config.get("websocket.authToken") || "",
+			reconnectInterval: config.get("websocket.reconnectInterval", 5000),
+			maxRetries: config.get("websocket.maxRetries", 5),
+			sessionId: sessionId,
+			clientType: "extension",
+		})
+
+		// Create a shareable session link
+		const serverUrl = config.get("websocket.serverUrl") as string
+		const webUiUrl = serverUrl.replace(/^ws/, "http") + "/ui/" + sessionId
+		outputChannel.appendLine(`Session link: ${webUiUrl}`)
+
+		// Register a command to copy the session link
+		context.subscriptions.push(
+			vscode.commands.registerCommand("roo-cline.copySessionLink", async () => {
+				await vscode.env.clipboard.writeText(webUiUrl)
+				vscode.window.showInformationMessage(`Session link copied to clipboard: ${webUiUrl}`)
+			}),
+		)
+
+		provider.on("messageToWebview", webSocketAdapter.forwardMessageEvent.bind(webSocketAdapter))
+	}
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(ClineProvider.sideBarId, provider, {
@@ -116,7 +157,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerTerminalActions(context)
 
 	// Allows other extensions to activate once Roo is ready.
-	vscode.commands.executeCommand('roo-cline.activationCompleted');
+	vscode.commands.executeCommand("roo-cline.activationCompleted")
 
 	// Implements the `RooCodeAPI` interface.
 	return new API(outputChannel, provider)
@@ -131,4 +172,9 @@ export async function deactivate() {
 
 	// Clean up terminal handlers
 	TerminalRegistry.cleanup()
+
+	// Clean up WebSocket connection
+	if (webSocketAdapter) {
+		webSocketAdapter = null
+	}
 }

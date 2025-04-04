@@ -1149,10 +1149,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 	return (
 		<div
 			style={{
-				position: "fixed",
-				top: 0,
-				left: 0,
-				right: 0,
+				height: "100%",
 				bottom: 0,
 				display: isHidden ? "none" : "flex",
 				flexDirection: "column",

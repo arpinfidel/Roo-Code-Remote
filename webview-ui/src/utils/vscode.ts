@@ -1,3 +1,4 @@
+import { WsClient } from "@/lib/ws-client"
 import { WebviewMessage } from "../../../src/shared/WebviewMessage"
 import type { WebviewApi } from "vscode-webview"
 
@@ -12,13 +13,19 @@ import type { WebviewApi } from "vscode-webview"
  */
 class VSCodeAPIWrapper {
 	private readonly vsCodeApi: WebviewApi<unknown> | undefined
+	private wsClient: WsClient | null
 
-	constructor() {
+	constructor(wsClient: WsClient | null = null) {
 		// Check if the acquireVsCodeApi function exists in the current development
 		// context (i.e. VS Code development window or web browser)
 		if (typeof acquireVsCodeApi === "function") {
 			this.vsCodeApi = acquireVsCodeApi()
 		}
+		this.wsClient = wsClient
+	}
+
+	public setWsClient(wsClient: WsClient) {
+		this.wsClient = wsClient
 	}
 
 	/**
@@ -32,8 +39,16 @@ class VSCodeAPIWrapper {
 	public postMessage(message: WebviewMessage) {
 		if (this.vsCodeApi) {
 			this.vsCodeApi.postMessage(message)
+		} else if (this.wsClient) {
+			// In standalone mode, send via WebSocket
+			this.wsClient
+				.send({
+					type: "vscode-message",
+					payload: message,
+				})
+				.catch(console.error)
 		} else {
-			console.log(message)
+			console.log("No connection available:", message)
 		}
 	}
 

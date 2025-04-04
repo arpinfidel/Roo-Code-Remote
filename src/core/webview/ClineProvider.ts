@@ -61,6 +61,7 @@ import { WebviewMessage } from "../../shared/WebviewMessage"
 
 export type ClineProviderEvents = {
 	clineCreated: [cline: Cline]
+	messageToWebview: [message: ExtensionMessage]
 }
 
 export class ClineProvider extends EventEmitter<ClineProviderEvents> implements vscode.WebviewViewProvider {
@@ -558,6 +559,8 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 
 	public async postMessageToWebview(message: ExtensionMessage) {
 		await this.view?.webview.postMessage(message)
+		this.outputChannel.appendLine(`[postMessageToWebview] ${JSON.stringify(message)}`)
+		this.emit("messageToWebview", message)
 	}
 
 	private async getHMRHtmlContent(webview: vscode.Webview): Promise<string> {

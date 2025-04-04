@@ -234,7 +234,73 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 	useEvent("message", handleMessage)
 
 	useEffect(() => {
-		vscode.postMessage({ type: "webviewDidLaunch" })
+		if (typeof acquireVsCodeApi !== "undefined") {
+			// VSCode environment
+			vscode.postMessage({ type: "webviewDidLaunch" })
+		} else {
+			// Standalone mode - initialize with default state
+			const defaultState: ExtensionState = {
+				version: "1.0.0",
+				osInfo: "standalone",
+				clineMessages: [],
+				taskHistory: [],
+				shouldShowAnnouncement: false,
+				allowedCommands: [],
+				soundEnabled: false,
+				soundVolume: 0.5,
+				ttsEnabled: false,
+				ttsSpeed: 1.0,
+				diffEnabled: false,
+				enableCheckpoints: true,
+				checkpointStorage: "task",
+				fuzzyMatchThreshold: 1.0,
+				language: "en",
+				writeDelayMs: 1000,
+				browserViewportSize: "900x600",
+				screenshotQuality: 75,
+				terminalOutputLineLimit: 500,
+				terminalShellIntegrationTimeout: 4000,
+				mcpEnabled: true,
+				enableMcpServerCreation: true,
+				alwaysApproveResubmit: false,
+				requestDelaySeconds: 5,
+				rateLimitSeconds: 0,
+				currentApiConfigName: "default",
+				listApiConfigMeta: [],
+				mode: defaultModeSlug,
+				customModePrompts: defaultPrompts,
+				customSupportPrompts: {},
+				experiments: experimentDefault,
+				enhancementApiConfigId: "",
+				autoApprovalEnabled: false,
+				customModes: [],
+				maxOpenTabsContext: 20,
+				maxWorkspaceFiles: 200,
+				cwd: "",
+				browserToolEnabled: true,
+				telemetrySetting: "unset",
+				showRooIgnoredFiles: true,
+				renderContext: "editor",
+				maxReadFileLine: 500,
+				pinnedApiConfigs: {},
+				apiConfiguration: {
+					apiProvider: "openai",
+					apiKey: "",
+					modelInfo: {
+						id: "gpt-4",
+						name: "GPT-4",
+						maxTokens: 8192,
+						vendor: "openai",
+						family: "gpt",
+					},
+					temperature: 0.7,
+					apiBaseUrl: "https://api.openai.com/v1",
+				} as ApiConfiguration,
+			}
+			setState((prev) => mergeExtensionState(prev, defaultState as ExtensionState))
+			setDidHydrateState(true)
+			setShowWelcome(false)
+		}
 	}, [])
 
 	const contextValue: ExtensionStateContextType = {

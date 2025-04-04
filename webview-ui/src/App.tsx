@@ -3,9 +3,11 @@ import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { ExtensionMessage } from "../../src/shared/ExtensionMessage"
+import { NavigationBar } from "./components/navigation/NavigationBar"
 import TranslationProvider from "./i18n/TranslationContext"
 
 import { vscode } from "./utils/vscode"
+import { useWs, WsProvider } from "./context/ws-context"
 import { telemetryClient } from "./utils/TelemetryClient"
 import { ExtensionStateContextProvider, useExtensionState } from "./context/ExtensionStateContext"
 import ChatView from "./components/chat/ChatView"
@@ -16,6 +18,13 @@ import McpView from "./components/mcp/McpView"
 import PromptsView from "./components/prompts/PromptsView"
 import { HumanRelayDialog } from "./components/human-relay/HumanRelayDialog"
 
+// Mock vscode API when not in VSCode
+if (typeof acquireVsCodeApi === "undefined") {
+	window.vscode = {
+		postMessage: (msg: any) => console.log("Standalone mode:", msg),
+	}
+}
+
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 
 const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]>, Tab>> = {
@@ -24,6 +33,7 @@ const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]
 	promptsButtonClicked: "prompts",
 	mcpButtonClicked: "mcp",
 	historyButtonClicked: "history",
+	plusButtonClicked: "chat",
 }
 
 const App = () => {
@@ -88,8 +98,29 @@ const App = () => {
 		}
 	}, [telemetrySetting, telemetryKey, machineId, didHydrateState])
 
-	// Tell the extension that we are ready to receive messages.
-	useEffect(() => vscode.postMessage({ type: "webviewDidLaunch" }), [])
+	// Initialize connection based on environment
+	const { connect, client } = useWs()
+	useEffect(() => {
+		if (typeof acquireVsCodeApi !== "undefined") {
+			vscode.postMessage({ type: "webviewDidLaunch" })
+		} else {
+			const wsUrl = process.env.WS_URL || "ws://localhost:8080/ws"
+			console.log(`Standalone mode, connecting to ${wsUrl}`)
+
+			// get session_id from query param
+			const urlParams = new URLSearchParams(window.location.search)
+			const sessionId = urlParams.get("session_id")
+			client.setClientType("webui")
+			client.setSessionId(sessionId)
+			client.setURL(wsUrl)
+
+			vscode.setWsClient(client)
+
+			connect(wsUrl)
+				.then(() => console.log("WebSocket connection successful"))
+				.catch((err) => console.error("WebSocket connection not successful:", err))
+		}
+	}, [connect, client])
 
 	if (!didHydrateState) {
 		return null
@@ -100,17 +131,20 @@ const App = () => {
 	return showWelcome ? (
 		<WelcomeView />
 	) : (
-		<>
-			{tab === "prompts" && <PromptsView onDone={() => switchTab("chat")} />}
-			{tab === "mcp" && <McpView onDone={() => switchTab("chat")} />}
-			{tab === "history" && <HistoryView onDone={() => switchTab("chat")} />}
-			{tab === "settings" && <SettingsView ref={settingsRef} onDone={() => setTab("chat")} />}
-			<ChatView
-				isHidden={tab !== "chat"}
-				showAnnouncement={showAnnouncement}
-				hideAnnouncement={() => setShowAnnouncement(false)}
-				showHistoryView={() => switchTab("history")}
-			/>
+		<div className="flex flex-col h-screen">
+			<NavigationBar activeTab={tab} onTabChange={switchTab} />
+			<div className="flex-1 overflow-auto">
+				{tab === "prompts" && <PromptsView onDone={() => switchTab("chat")} />}
+				{tab === "mcp" && <McpView onDone={() => switchTab("chat")} />}
+				{tab === "history" && <HistoryView onDone={() => switchTab("chat")} />}
+				{tab === "settings" && <SettingsView ref={settingsRef} onDone={() => setTab("chat")} />}
+				<ChatView
+					isHidden={tab !== "chat"}
+					showAnnouncement={showAnnouncement}
+					hideAnnouncement={() => setShowAnnouncement(false)}
+					showHistoryView={() => switchTab("history")}
+				/>
+			</div>
 			<HumanRelayDialog
 				isOpen={humanRelayDialogState.isOpen}
 				requestId={humanRelayDialogState.requestId}
@@ -119,7 +153,7 @@ const App = () => {
 				onSubmit={(requestId, text) => vscode.postMessage({ type: "humanRelayResponse", requestId, text })}
 				onCancel={(requestId) => vscode.postMessage({ type: "humanRelayCancel", requestId })}
 			/>
-		</>
+		</div>
 	)
 }
 
@@ -129,7 +163,9 @@ const AppWithProviders = () => (
 	<ExtensionStateContextProvider>
 		<TranslationProvider>
 			<QueryClientProvider client={queryClient}>
-				<App />
+				<WsProvider>
+					<App />
+				</WsProvider>
 			</QueryClientProvider>
 		</TranslationProvider>
 	</ExtensionStateContextProvider>
