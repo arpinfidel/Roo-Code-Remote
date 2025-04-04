@@ -6,6 +6,7 @@ export interface WebSocketConfig {
 	reconnectInterval: number
 	maxRetries: number
 	autoConnect?: boolean
+	sessionId?: string
 }
 
 export type WebSocketMessageType =

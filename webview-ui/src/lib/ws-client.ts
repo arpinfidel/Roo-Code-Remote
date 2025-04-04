@@ -20,6 +20,7 @@ export class WsClient {
 	private queue: WsMessage[] = []
 	private url: string = ""
 	private eventTarget = new EventTarget()
+	private sessionId: string | null = null
 
 	setClientType(type: "webui" | "extension") {
 		this.clientType = type
@@ -53,9 +54,17 @@ export class WsClient {
 
 			this.socket.onopen = () => {
 				this.status = "connected"
+				// Check if we have a session ID from the window object (for web UI)
+				if (typeof window !== "undefined" && (window as any).ROO_SESSION_ID) {
+					this.sessionId = (window as any).ROO_SESSION_ID
+				}
+
 				this.send({
 					type: "client-identify",
 					clientType: this.clientType,
+					payload: {
+						sessionId: this.sessionId,
+					},
 				}).catch(console.error)
 				this.flushQueue()
 				this.emit("connected")

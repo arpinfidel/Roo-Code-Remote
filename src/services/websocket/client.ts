@@ -13,6 +13,8 @@ type WebSocketConfig = {
 	authToken: string
 	reconnectInterval: number
 	maxRetries: number
+	clientType: "webui" | "extension"
+	sessionId?: string
 }
 
 export class WebSocketClient extends EventEmitter {
@@ -26,15 +28,9 @@ export class WebSocketClient extends EventEmitter {
 		reject: (reason?: any) => void
 	}> = []
 
-	private clientType: "webui" | "extension" = "extension"
-
 	constructor(config: WebSocketConfig) {
 		super()
 		this.config = config
-	}
-
-	setClientType(type: "webui" | "extension") {
-		this.clientType = type
 	}
 
 	public connect(): Promise<void> {
@@ -59,7 +55,8 @@ export class WebSocketClient extends EventEmitter {
 				const identifyMsg: WebSocketMessage = {
 					type: "client-identify",
 					payload: {
-						clientType: this.clientType,
+						clientType: this.config.clientType,
+						sessionId: this.config.sessionId,
 					},
 				}
 				console.log("Sending client identification:", identifyMsg)

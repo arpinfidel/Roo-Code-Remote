@@ -100,12 +100,16 @@ const App = () => {
 	const { connect } = useWs()
 	useEffect(() => {
 		if (typeof acquireVsCodeApi !== "undefined") {
-			// VSCode environment
 			vscode.postMessage({ type: "webviewDidLaunch" })
 		} else {
-			console.log("Standalone mode, connecting to ws://localhost:8080")
 			// Standalone mode - connect to WebSocket
-			connect("ws://localhost:8080").catch(console.error)
+			let wsUrl = "ws://localhost:8080/ws"
+
+			const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+			wsUrl = `${wsProtocol}//${window.location.host}/ws`
+			console.log(`Standalone mode, connecting to ${wsUrl}`)
+
+			connect(wsUrl).catch(console.error)
 		}
 	}, [connect])
 

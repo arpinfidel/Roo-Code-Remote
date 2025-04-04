@@ -27,6 +27,7 @@ import { WebSocketApiAdapter } from "./services/websocket/api-adapter"
 
 import { handleUri, registerCommands, registerCodeActions, registerTerminalActions } from "./activate"
 import { formatLanguage } from "./shared/language"
+import { randomUUID } from "crypto"
 
 /**
  * Built using https://github.com/microsoft/vscode-webview-ui-toolkit
@@ -75,13 +76,36 @@ export async function activate(context: vscode.ExtensionContext) {
 	const config = vscode.workspace.getConfiguration("roo-cline")
 	if (config.get("websocket.serverUrl")) {
 		const api = new API(outputChannel, provider)
-		outputChannel.appendLine(`Initializing WebSocket connection to ${config.get("websocket.serverUrl")}`)
+		// Generate a unique session ID for this extension instance
+		const sessionId = randomUUID()
+		outputChannel.appendLine(
+			`Initializing WebSocket connection to ${config.get("websocket.serverUrl")} with session ID: ${sessionId}`,
+		)
+
+		// Store the session ID in global state for later use
+		context.globalState.update("websocketSessionId", sessionId)
+
 		webSocketAdapter = new WebSocketApiAdapter(api, {
 			serverUrl: config.get("websocket.serverUrl") || "",
 			authToken: config.get("websocket.authToken") || "",
 			reconnectInterval: config.get("websocket.reconnectInterval", 5000),
 			maxRetries: config.get("websocket.maxRetries", 5),
+			sessionId: sessionId,
 		})
+
+		// Create a shareable session link
+		const serverUrl = config.get("websocket.serverUrl") as string
+		const webUiUrl = serverUrl.replace(/^ws/, "http") + "/ui/" + sessionId
+		outputChannel.appendLine(`Session link: ${webUiUrl}`)
+
+		// Register a command to copy the session link
+		context.subscriptions.push(
+			vscode.commands.registerCommand("roo-cline.copySessionLink", async () => {
+				await vscode.env.clipboard.writeText(webUiUrl)
+				vscode.window.showInformationMessage(`Session link copied to clipboard: ${webUiUrl}`)
+			}),
+		)
+
 		provider.on("messageToWebview", webSocketAdapter.forwardMessageEvent.bind(webSocketAdapter))
 	}
 

@@ -81,6 +81,11 @@
 		},
 		"commands": [
 			{
+				"command": "roo-cline.copySessionLink",
+				"title": "Roo Code: Copy Remote Session Link to Clipboard",
+				"category": "Roo Code"
+			},
+			{
 				"command": "roo-cline.plusButtonClicked",
 				"title": "New Task",
 				"icon": "$(add)"
@@ -397,6 +402,8 @@
 		"delay": "^6.0.0",
 		"diff": "^5.2.0",
 		"diff-match-patch": "^1.0.5",
+		"dotenv": "^16.4.7",
+		"eruda": "^3.4.1",
 		"fast-deep-equal": "^3.1.3",
 		"fast-xml-parser": "^4.5.1",
 		"fastest-levenshtein": "^1.0.16",
