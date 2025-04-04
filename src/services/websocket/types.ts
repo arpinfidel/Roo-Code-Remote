@@ -10,7 +10,13 @@ export interface WebSocketConfig {
 	clientType: "webui" | "extension"
 }
 
-export type WebSocketMessageType = "command" | "response" | "event" | "vscode-message" | "vscode-event"
+export type WebSocketMessageType =
+	| "command"
+	| "response"
+	| "event"
+	| "vscode-message"
+	| "vscode-event"
+	| "client-connected"
 
 export interface WebSocketMessage {
 	id?: string // Make id optional for outgoing messages

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/arpinfidel/Roo-Code-Remote/server/syncmap"
 	"github.com/google/uuid"
@@ -126,6 +127,12 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, ok := hub.sessions.Get(sessionID); clientType == string(WebUI) && !ok {
+		log.Printf("Session doesn't exist %s", r.URL.String())
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Error upgrading connection:", err)
@@ -149,6 +156,14 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	if clientType == string(Extension) {
 		sess.Host = client
 	} else {
+		clientConnected := WebSocketMessage{
+			ID:        uuid.New().String(),
+			Type:      ClientConnected,
+			Origin:    conn.RemoteAddr().String(),
+			Timestamp: time.Now().UnixMilli(),
+			ClientID:  client.clientID,
+		}
+		sess.Host.sendMessage(&clientConnected)
 		sess.Clients.Set(client, struct{}{})
 	}
 

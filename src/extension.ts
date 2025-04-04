@@ -72,10 +72,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	const provider = new ClineProvider(context, outputChannel, "sidebar")
 	telemetryService.setProvider(provider)
 
+	const api = new API(outputChannel, provider)
+
 	// Initialize WebSocket connection if configured
 	const config = vscode.workspace.getConfiguration("roo-cline")
 	if (config.get("websocket.serverUrl")) {
-		const api = new API(outputChannel, provider)
 		// Generate a unique session ID for this extension instance
 		const sessionId = randomUUID()
 		outputChannel.appendLine(
@@ -96,7 +97,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		// Create a shareable session link
 		const serverUrl = config.get("websocket.serverUrl") as string
-		const webUiUrl = serverUrl.replace(/^ws/, "http") + "/ui/" + sessionId
+		const webUiUrl = serverUrl.replace(/^ws/, "http") + "?session_id=" + sessionId
 		outputChannel.appendLine(`Session link: ${webUiUrl}`)
 
 		// Register a command to copy the session link
@@ -160,7 +161,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	vscode.commands.executeCommand("roo-cline.activationCompleted")
 
 	// Implements the `RooCodeAPI` interface.
-	return new API(outputChannel, provider)
+	return api
 }
 
 // This method is called when your extension is deactivated

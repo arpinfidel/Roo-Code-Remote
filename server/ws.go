@@ -14,14 +14,15 @@ import (
 type MessageType string
 
 const (
-	ConnectionInfo MessageType = "connection-info"
-	Acknowledge    MessageType = "acknowledge"
-	Error          MessageType = "error"
-	Command        MessageType = "command"
-	Response       MessageType = "response"
-	Event          MessageType = "event"
-	VSCodeMessage  MessageType = "vscode-message"
-	VSCodeEvent    MessageType = "vscode-event"
+	ConnectionInfo  MessageType = "connection-info"
+	Acknowledge     MessageType = "acknowledge"
+	Error           MessageType = "error"
+	Command         MessageType = "command"
+	Response        MessageType = "response"
+	Event           MessageType = "event"
+	VSCodeMessage   MessageType = "vscode-message"
+	VSCodeEvent     MessageType = "vscode-event"
+	ClientConnected MessageType = "client-connected"
 )
 
 // ClientType represents the type of client

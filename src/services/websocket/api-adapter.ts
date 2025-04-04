@@ -52,6 +52,12 @@ export class WebSocketApiAdapter {
 							} as WebSocketMessage)
 						})
 					break
+				case "client-connected":
+					const provider = this.api.getProvider()
+					provider.getStateToPostToWebview().then((state) => {
+						provider.emit("messageToWebview", { type: "state", state })
+					})
+					break
 			}
 		})
 	}
