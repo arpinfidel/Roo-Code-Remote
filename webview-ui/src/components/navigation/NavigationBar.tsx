@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom" // Added
 import { PlusIcon, HistoryIcon, SettingsIcon, HelpIcon } from "../icons"
 import { vscode } from "../../utils/vscode"
 
@@ -9,6 +10,8 @@ type NavigationBarProps = {
 }
 
 export const NavigationBar = ({ activeTab, onTabChange }: NavigationBarProps) => {
+	const isStandalone = typeof acquireVsCodeApi === "undefined" // Added check
+
 	return (
 		<div className="flex items-center justify-between p-2 border-b border-vscode-panel-border bg-vscode-panel-background">
 			<div className="flex space-x-2">
@@ -62,6 +65,18 @@ export const NavigationBar = ({ activeTab, onTabChange }: NavigationBarProps) =>
 					title="Help">
 					<HelpIcon className="w-5 h-5" />
 				</button>
+
+				{/* Conditionally add the 'X' button in standalone mode */}
+				{isStandalone && (
+					<Link
+						to="/"
+						title="Back to Active Sessions"
+						className="p-1 flex items-center justify-center text-lg text-vscode-foreground hover:bg-vscode-toolbar-hoverBackground rounded focus:outline-none focus:ring-2 focus:ring-vscode-focusBorder"
+						aria-label="Back to Active Sessions">
+						{/* Using Codicon 'close' */}
+						<span className="codicon codicon-close"></span>
+					</Link>
+				)}
 			</div>
 		</div>
 	)
