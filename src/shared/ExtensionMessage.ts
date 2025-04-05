@@ -69,6 +69,7 @@ export interface ExtensionMessage {
 		| "maxReadFileLine"
 		| "fileSearchResults"
 		| "toggleApiConfigPin"
+		| "setToken"
 	text?: string
 	action?:
 		| "chatButtonClicked"
@@ -114,6 +115,7 @@ export interface ExtensionMessage {
 		label?: string
 	}>
 	error?: string
+	credential?: string
 }
 
 export type ExtensionState = Pick<

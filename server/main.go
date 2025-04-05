@@ -1,16 +1,21 @@
 package main
 
 import (
-	"encoding/json" // Added for JSON marshalling
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil" // Added for reverse proxy
-	"net/url"           // Added for reverse proxy
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/auth"
+	"google.golang.org/api/option"
 
 	"github.com/arpinfidel/Roo-Code-Remote/server/syncmap"
 	"github.com/google/uuid"
@@ -20,12 +25,12 @@ import (
 
 type Session struct {
 	Host    *Client
-	Clients syncmap.SyncMap[*Client, struct{}]
+	Clients *syncmap.SyncMap[*Client, struct{}]
 }
 
 // Hub maintains the set of active clients
 type Hub struct {
-	sessions  syncmap.SyncMap[string, Session]
+	sessions  *syncmap.SyncMap[string, Session]
 	broadcast chan *WebSocketMessage
 }
 
@@ -44,6 +49,7 @@ var (
 		sessions:  syncmap.New[string, Session](),
 		broadcast: make(chan *WebSocketMessage, 10),
 	}
+	firebaseAuth *auth.Client
 )
 
 // loadConfig loads configuration from environment variables
@@ -253,9 +259,60 @@ func newReverseProxy(targetUrl string) (*httputil.ReverseProxy, error) {
 	return proxy, nil
 }
 
+func initializeFirebase() error {
+	opt := option.WithCredentialsFile(os.Getenv("FIREBASE_CREDS"))
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+	if err != nil {
+		return fmt.Errorf("error initializing Firebase app: %v", err)
+	}
+
+	firebaseAuth, err = app.Auth(context.Background())
+	if err != nil {
+		return fmt.Errorf("error getting Firebase auth client: %v", err)
+	}
+
+	return nil
+}
+
+func serveFirebaseToken(w http.ResponseWriter, r *http.Request) {
+	// Check auth token if configured
+	if config.AuthToken != "" {
+		requestToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if requestToken != config.AuthToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+			return
+		}
+	}
+
+	// Get UID from request
+	uid := r.URL.Query().Get("uid")
+	if uid == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "uid is required"})
+		return
+	}
+
+	// Generate custom token
+	token, err := firebaseAuth.CustomToken(context.Background(), uid)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
 func main() {
 	// Load configuration
 	config = loadConfig()
+
+	// Initialize Firebase
+	if err := initializeFirebase(); err != nil {
+		log.Fatalf("Failed to initialize Firebase: %v", err)
+	}
 
 	// Set up host if not provided
 	if config.Host == "" {
@@ -287,6 +344,7 @@ func main() {
 	// --- Register API Handlers FIRST ---
 	mux.HandleFunc("/ws", serveWs)
 	mux.HandleFunc("/api/sessions", serveApiSessions)
+	mux.HandleFunc("/api/firebase-token", serveFirebaseToken)
 
 	// --- Handle other requests ---
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

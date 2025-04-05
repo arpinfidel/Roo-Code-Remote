@@ -32,6 +32,14 @@ export const handleUri = async (uri: vscode.Uri) => {
 			}
 			break
 		}
+		case "/set-token": {
+			const token = query.get("token")
+			visibleProvider.postMessageToWebview({
+				type: "setToken",
+				text: token ? token : "",
+			})
+			break
+		}
 		default:
 			break
 	}

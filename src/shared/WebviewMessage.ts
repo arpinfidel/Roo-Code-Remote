@@ -124,6 +124,7 @@ export interface WebviewMessage {
 		| "popoutButtonClicked"
 		| "helpButtonClicked"
 		| "plusButtonClicked"
+		| "requestLogin"
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse

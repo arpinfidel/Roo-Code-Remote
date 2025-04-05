@@ -107,7 +107,10 @@ func (c *Client) writePump() {
 // readPump pumps messages from the websocket connection to the hub
 func (c *Client) readPump() {
 	defer func() {
-		s, _ := hub.sessions.Get(c.sessionID)
+		s, ok := hub.sessions.Get(c.sessionID)
+		if !ok {
+			return
+		}
 		if c.clientType == Extension {
 			s.Clients.Range(func(c *Client, value struct{}) bool {
 				c.conn.Close()
@@ -115,7 +118,9 @@ func (c *Client) readPump() {
 			})
 			hub.sessions.Delete(c.sessionID)
 		} else {
-			s.Clients.Delete(c)
+			if s.Clients != nil {
+				s.Clients.Delete(c)
+			}
 		}
 		log.Printf("Client disconnected: %s (%s)", c.clientType, c.clientID)
 		c.conn.Close()

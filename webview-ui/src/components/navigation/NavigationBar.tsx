@@ -1,16 +1,20 @@
-import { Link } from "react-router-dom" // Added
+import { Link, useNavigate } from "react-router-dom"
 import { PlusIcon, HistoryIcon, SettingsIcon, HelpIcon } from "../icons"
 import { vscode } from "../../utils/vscode"
+import { useFirebase } from "../../context/FirebaseContext"
 
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 
 type NavigationBarProps = {
 	activeTab: Tab
 	onTabChange: (tab: Tab) => void
+	user: any
 }
 
-export const NavigationBar = ({ activeTab, onTabChange }: NavigationBarProps) => {
+export const NavigationBar = ({ activeTab, onTabChange, user }: NavigationBarProps) => {
+	const { auth } = useFirebase()
 	const isStandalone = typeof acquireVsCodeApi === "undefined" // Added check
+	const navigate = useNavigate()
 
 	return (
 		<div className="flex items-center justify-between p-2 border-b border-vscode-panel-border bg-vscode-panel-background">
@@ -65,6 +69,42 @@ export const NavigationBar = ({ activeTab, onTabChange }: NavigationBarProps) =>
 					title="Help">
 					<HelpIcon className="w-5 h-5" />
 				</button>
+
+				{user ? (
+					<div className="relative group">
+						<button className="flex items-center space-x-1 p-2 rounded hover:bg-vscode-button-secondaryHoverBackground">
+							<span className="text-md text-vscode-descriptionForeground">{user.email}</span>
+							<span className="codicon codicon-chevron-down text-xs"></span>
+						</button>
+						<div className="absolute right-0 mt-1 w-48 rounded-md shadow-lg bg-vscode-dropdown-background border border-vscode-dropdown-border hidden group-hover:block z-50">
+							<div className="py-1">
+								<button
+									className="block w-full text-left px-4 py-2 text-sm text-vscode-foreground hover:bg-vscode-list-hoverBackground"
+									onClick={() => auth.signOut()}>
+									Sign Out
+								</button>
+							</div>
+						</div>
+					</div>
+				) : (
+					<button
+						className="p-2 rounded hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground"
+						onClick={async () => {
+							if (isStandalone) {
+								// Pass current path as redirect URL
+								const currentUrl = new URL(window.location.href)
+								navigate(`/login?redirect_url=${encodeURIComponent(currentUrl.toString())}`)
+							} else {
+								vscode.postMessage({
+									type: "requestLogin",
+								})
+							}
+						}}
+						title="Login with Google">
+						Login
+						<div className="w-5 h-5" />
+					</button>
+				)}
 
 				{/* Conditionally add the 'X' button in standalone mode */}
 				{isStandalone && (

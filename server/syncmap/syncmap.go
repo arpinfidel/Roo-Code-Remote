@@ -8,8 +8,8 @@ type SyncMap[K comparable, V any] struct {
 	m  map[K]V
 }
 
-func New[K comparable, V any]() SyncMap[K, V] {
-	return SyncMap[K, V]{
+func New[K comparable, V any]() *SyncMap[K, V] {
+	return &SyncMap[K, V]{
 		mu: &sync.RWMutex{},
 		m:  make(map[K]V),
 	}

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { User } from "firebase/auth"
+import { FirebaseProvider, useFirebase } from "./context/FirebaseContext"
+
 import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
@@ -25,7 +28,8 @@ import WelcomeView from "./components/welcome/WelcomeView"
 import McpView from "./components/mcp/McpView"
 import PromptsView from "./components/prompts/PromptsView"
 import { HumanRelayDialog } from "./components/human-relay/HumanRelayDialog"
-import ActiveSessionsView from "./components/sessions/ActiveSessionsView" // Added
+import ActiveSessionsView from "./components/sessions/ActiveSessionsView"
+import { LoginView } from "./components/login/LoginView"
 
 // Define a type for the mock vscode API
 type MockVscode = {
@@ -64,10 +68,9 @@ const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]
 	plusButtonClicked: "chat",
 }
 
-// --- New MainAppView Component ---
-const MainAppView: React.FC = () => {
+const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	const [tab, setTab] = useState<Tab>("chat")
-	const [showAnnouncement, setShowAnnouncement] = useState(false) // Moved from App
+	const [showAnnouncement, setShowAnnouncement] = useState(false)
 	const [humanRelayDialogState, setHumanRelayDialogState] = useState<{
 		isOpen: boolean
 		requestId: string
@@ -76,12 +79,11 @@ const MainAppView: React.FC = () => {
 		isOpen: false,
 		requestId: "",
 		promptText: "",
-	}) // Moved from App
-	const settingsRef = useRef<SettingsViewRef>(null) // Moved from App
+	})
+	const settingsRef = useRef<SettingsViewRef>(null)
 
-	const { shouldShowAnnouncement } = useExtensionState() // Needed for announcement logic
+	const { shouldShowAnnouncement } = useExtensionState()
 
-	// Moved switchTab logic from App
 	const switchTab = useCallback((newTab: Tab) => {
 		if (settingsRef.current?.checkUnsaveChanges) {
 			settingsRef.current.checkUnsaveChanges(() => setTab(newTab))
@@ -90,7 +92,6 @@ const MainAppView: React.FC = () => {
 		}
 	}, [])
 
-	// Moved onMessage handler from App
 	const onMessage = useCallback(
 		(e: MessageEvent) => {
 			const message: ExtensionMessage = e.data
@@ -152,7 +153,7 @@ const MainAppView: React.FC = () => {
 	// The original return statement when showWelcome is false
 	return (
 		<div className="flex flex-col h-screen">
-			<NavigationBar activeTab={tab} onTabChange={switchTab} />
+			<NavigationBar activeTab={tab} onTabChange={switchTab} user={user} />
 			<div className="flex-1 overflow-auto">
 				{/* Render components based on internal tab state */}
 				{tab === "prompts" && <PromptsView onDone={() => switchTab("chat")} />}
@@ -179,6 +180,7 @@ const MainAppView: React.FC = () => {
 }
 
 const App = () => {
+	const [user, setUser] = useState<User | null>(null)
 	const { didHydrateState, showWelcome, telemetrySetting, telemetryKey, machineId } = useExtensionState()
 
 	useEffect(() => {
@@ -186,6 +188,15 @@ const App = () => {
 			telemetryClient.updateTelemetryState(telemetrySetting, telemetryKey, machineId)
 		}
 	}, [telemetrySetting, telemetryKey, machineId, didHydrateState])
+
+	const { auth } = useFirebase()
+
+	useEffect(() => {
+		const unsubscribe = auth.onAuthStateChanged((user) => {
+			setUser(user)
+		})
+		return () => unsubscribe()
+	}, [auth])
 
 	// Initial setup effect (only VSCode specific logic remains here)
 	useEffect(() => {
@@ -209,9 +220,10 @@ const App = () => {
 		<WelcomeView />
 	) : (
 		<Routes>
-			<Route path="/app" element={<MainAppView />} />
+			<Route path="/app" element={<MainAppView user={user} />} />
 			{/* Conditionally render ActiveSessionsView only in standalone mode */}
 			{isStandalone && <Route path="/" element={<ActiveSessionsView />} />}
+			<Route path="/login" element={<LoginView />} />
 			{/* Redirect unknown paths */}
 			<Route path="*" element={<Navigate to={isStandalone ? "/" : "/app"} replace />} />
 		</Routes>
@@ -234,7 +246,9 @@ const AppWithProviders = () => {
 				<TranslationProvider>
 					<QueryClientProvider client={queryClient}>
 						<WsProvider>
-							<App />
+							<FirebaseProvider>
+								<App />
+							</FirebaseProvider>
 						</WsProvider>
 					</QueryClientProvider>
 				</TranslationProvider>

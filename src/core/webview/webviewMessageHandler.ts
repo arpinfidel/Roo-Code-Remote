@@ -1337,6 +1337,16 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			await provider.postStateToWebview()
 			break
 		}
+
+		case "requestLogin": {
+			const extensionUrl = `${vscode.env.uriScheme}://RooVeterinaryInc.roo-cline/set-token`
+			const extensionUrlParsed = vscode.Uri.parse(extensionUrl)
+			// const callbackUri = await vscode.env.asExternalUri(extensionUrlParsed);
+			const url = new URL("http://localhost:8080/login")
+			url.searchParams.set("redirect_url", extensionUrlParsed.toString())
+			url.searchParams.set("get_token", "true")
+			await vscode.env.openExternal(vscode.Uri.parse(url.toString()))
+		}
 	}
 }
 
