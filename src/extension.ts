@@ -39,7 +39,7 @@ import { randomUUID } from "crypto"
 
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
-let webSocketAdapter: WebSocketApiAdapter | null = null
+let webSocketAdapter: WebSocketApiAdapter
 
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
@@ -173,9 +173,4 @@ export async function deactivate() {
 
 	// Clean up terminal handlers
 	TerminalRegistry.cleanup()
-
-	// Clean up WebSocket connection
-	if (webSocketAdapter) {
-		webSocketAdapter = null
-	}
 }

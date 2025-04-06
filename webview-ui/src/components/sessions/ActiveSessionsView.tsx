@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
-// Removed useWs import as it's no longer needed for fetching sessions here
-// import { useWs } from '../../context/ws-context';
+import { useAuthToken } from "../../components/ui/hooks/useAuthToken"
 
 // Define an interface for the session data expected from the API
 interface ApiSessionInfo {
@@ -10,8 +9,7 @@ interface ApiSessionInfo {
 }
 
 const ActiveSessionsView: React.FC = () => {
-	// Removed ws context usage for fetching
-	// const { client, status, sendCommand, error: wsError } = useWs();
+	const { getAuthHeaders } = useAuthToken() // Get auth headers function
 	const [activeSessions, setActiveSessions] = useState<ApiSessionInfo[]>([]) // State for sessions
 	const [isLoading, setIsLoading] = useState(true) // Loading state
 	const [error, setError] = useState<string | null>(null) // Error state for fetch
@@ -21,10 +19,14 @@ const ActiveSessionsView: React.FC = () => {
 			setIsLoading(true)
 			setError(null)
 			try {
+				// Get authentication headers
+				const headers = await getAuthHeaders()
+
 				// Assuming the API is served from the same origin, otherwise use full URL
 				// e.g., const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
-				// const response = await fetch(`${apiUrl}/api/sessions`);
-				const response = await fetch("/api/sessions") // Relative path
+				const response = await fetch("/api/sessions", {
+					headers, // Include auth headers in the request
+				})
 
 				if (!response.ok) {
 					throw new Error(`HTTP error! status: ${response.status}`)
@@ -44,7 +46,7 @@ const ActiveSessionsView: React.FC = () => {
 
 		// No cleanup needed for fetch like with WebSocket listeners
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []) // Empty dependency array means this runs once on mount
+	}, [getAuthHeaders]) // Add getAuthHeaders to dependencies
 
 	return (
 		<div className="p-4">

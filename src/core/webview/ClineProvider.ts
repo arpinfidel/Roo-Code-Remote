@@ -564,14 +564,14 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	}
 
 	private async getHMRHtmlContent(webview: vscode.Webview): Promise<string> {
-		const localPort = "5173"
+		const localPort = "8080"
 		const localServerUrl = `localhost:${localPort}`
 
 		// Check if local dev server is running.
 		try {
 			await axios.get(`http://${localServerUrl}`)
 		} catch (error) {
-			vscode.window.showErrorMessage(t("common:errors.hmr_not_running"))
+			vscode.window.showErrorMessage(t("common:errors.hmr_not_running")+" "+error)
 
 			return this.getHtmlContent(webview)
 		}

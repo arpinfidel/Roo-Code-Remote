@@ -1,6 +1,6 @@
 import { initializeApp, FirebaseApp } from "firebase/app"
 import { getAnalytics, Analytics } from "firebase/analytics"
-import { getAuth, Auth, signInWithCustomToken } from "firebase/auth"
+import { getAuth, Auth, signInWithCustomToken, User } from "firebase/auth"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useEvent } from "react-use"
 import { ExtensionMessage } from "../../../src/shared/ExtensionMessage"
@@ -20,12 +20,18 @@ interface FirebaseContextValue {
 	app: FirebaseApp
 	analytics: Analytics
 	auth: Auth
+	user: User | null
+	isAuthenticated: boolean
+	authChecked: boolean
 }
 
 const FirebaseContext = createContext<FirebaseContextValue | null>(null)
 
 export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 	const [firebase, setFirebase] = useState<FirebaseContextValue | null>(null)
+	const [user, setUser] = useState<User | null>(null)
+	const [isAuthenticated, setIsAuthenticated] = useState(false)
+	const [authChecked, setAuthChecked] = useState(false)
 
 	useEffect(() => {
 		// Initialize Firebase
@@ -33,10 +39,23 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 		const analytics = getAnalytics(app)
 		const auth = getAuth(app)
 
-		setFirebase({ app, analytics, auth })
+		// Set up auth state listener to properly track authentication status
+		const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+			setUser(currentUser)
+			setIsAuthenticated(!!currentUser)
+			setAuthChecked(true)
+			if (currentUser) {
+				console.log("User authenticated:", currentUser.uid)
+			} else {
+				console.log("User not authenticated")
+			}
+		})
+
+		setFirebase({ app, analytics, auth, user, isAuthenticated, authChecked })
 
 		return () => {
-			// Cleanup if needed
+			// Cleanup auth listener on unmount
+			unsubscribe()
 		}
 	}, [])
 
@@ -58,6 +77,18 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 			}
 		}
 	})
+
+	// Update the firebase context value when auth state changes
+	useEffect(() => {
+		if (firebase) {
+			setFirebase({
+				...firebase,
+				user,
+				isAuthenticated,
+				authChecked
+			})
+		}
+	}, [user, isAuthenticated, authChecked])
 
 	if (!firebase) {
 		return null // Or loading indicator

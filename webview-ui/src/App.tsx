@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { User } from "firebase/auth"
 import { FirebaseProvider, useFirebase } from "./context/FirebaseContext"
+import { useAuthToken } from "./components/ui/hooks/useAuthToken"
 
 import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -30,6 +31,7 @@ import PromptsView from "./components/prompts/PromptsView"
 import { HumanRelayDialog } from "./components/human-relay/HumanRelayDialog"
 import ActiveSessionsView from "./components/sessions/ActiveSessionsView"
 import { LoginView } from "./components/login/LoginView"
+import { ProtectedRoute } from "./components/auth/ProtectedRoute"
 
 // Define a type for the mock vscode API
 type MockVscode = {
@@ -91,6 +93,7 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 			setTab(newTab)
 		}
 	}, [])
+	console.log("asdfasdf")
 
 	const onMessage = useCallback(
 		(e: MessageEvent) => {
@@ -125,6 +128,7 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	// Standalone mode: Read session_id and potentially connect
 	const [searchParams] = useSearchParams()
 	const { connect, client } = useWs() // Get WS context here
+	const { token, getAuthHeaders } = useAuthToken() // Get auth token
 
 	useEffect(() => {
 		// This effect runs specifically within the MainAppView context
@@ -139,6 +143,19 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 			client.setSessionId(standaloneSessionId) // Set session ID from URL param
 			client.setURL(wsUrl)
 
+			// Set auth token if available
+			if (token) {
+				client.setAuthToken(token)
+			} else {
+				// If token isn't immediately available, get it from headers
+				getAuthHeaders().then(headers => {
+					const authToken = headers.Authorization?.split(' ')[1]
+					if (authToken) {
+						client.setAuthToken(authToken)
+					}
+				})
+			}
+
 			// Ensure the mock vscode has the client reference and call setWsClient
 			if (window.vscode && typeof (window.vscode as MockVscode).setWsClient === "function") {
 				;(window.vscode as MockVscode).setWsClient!(client) // Use non-null assertion if sure it exists
@@ -148,7 +165,7 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 				.then(() => console.log("MainAppView: WebSocket connection successful"))
 				.catch((err) => console.error("MainAppView: WebSocket connection not successful:", err))
 		}
-	}, [searchParams, connect, client]) // Depend on searchParams, connect, client
+	}, [searchParams, connect, client, token, getAuthHeaders]) // Added token and getAuthHeaders to dependencies
 
 	// The original return statement when showWelcome is false
 	return (
@@ -219,14 +236,34 @@ const App = () => {
 	return showWelcome ? (
 		<WelcomeView />
 	) : (
-		<Routes>
-			<Route path="/app" element={<MainAppView user={user} />} />
-			{/* Conditionally render ActiveSessionsView only in standalone mode */}
-			{isStandalone && <Route path="/" element={<ActiveSessionsView />} />}
-			<Route path="/login" element={<LoginView />} />
-			{/* Redirect unknown paths */}
-			<Route path="*" element={<Navigate to={isStandalone ? "/" : "/app"} replace />} />
-		</Routes>
+		(isStandalone ? (
+			<Routes>
+				<Route 
+					path="/app" 
+					element={
+						<ProtectedRoute>
+							<MainAppView user={user} />
+						</ProtectedRoute>
+					} 
+				/>
+				<Route 
+					path="/" 
+					element={
+						<ProtectedRoute>
+							<ActiveSessionsView />
+						</ProtectedRoute>
+					} 
+				/>
+				<Route path="/login" element={<LoginView />} />
+				{/* Redirect root path based on authentication status */}
+				<Route path="/" element={ <Navigate to="/login" replace /> } />
+				{/* Redirect unknown paths */}
+				<Route path="*" element={<Navigate to={isStandalone ? "/login" : "/app"} replace />} />
+			</Routes>)
+			:
+				<MainAppView user={user} />
+				// <Navigate to="/app" replace />
+		)
 	)
 }
 
