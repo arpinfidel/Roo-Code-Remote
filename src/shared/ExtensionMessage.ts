@@ -73,6 +73,10 @@ export interface ExtensionMessage {
 		| "toggleApiConfigPin"
 		| "setToken"
 		| "websocketState"
+		| "pairingChallenge" // E2EE: Extension sends challenge to webview
+		| "pairingStatus" // E2EE: Extension informs webview of pairing status (e.g., "paired")
+		| "sessionAck" // E2EE: Extension acknowledges session key exchange initiation
+		| "encryptedMessage" // E2EE: Contains encrypted payload
 	text?: string
 	action?:
 		| "chatButtonClicked"
@@ -120,6 +124,11 @@ export interface ExtensionMessage {
 	}>
 	error?: string
 	credential?: string
+	// E2EE Payloads
+	extensionPublicKey?: string // For pairingChallenge
+	verificationValue?: string // For pairingChallenge
+	status?: string // For pairingStatus (e.g., 'paired', 'error')
+	encryptedPayload?: string // E2EE: For encryptedMessage type
 }
 
 export type ExtensionState = Pick<

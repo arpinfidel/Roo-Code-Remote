@@ -18,6 +18,7 @@ import { combineCommandSequences } from "../../../../src/shared/combineCommandSe
 import { getApiMetrics } from "../../../../src/shared/getApiMetrics"
 import { useExtensionState } from "../../context/ExtensionStateContext"
 import { vscode } from "../../utils/vscode"
+import { encryptMessage } from "../../lib/cryptoUtils" // E2EE Encryption
 import HistoryPreview from "../history/HistoryPreview"
 import { normalizeApiConfiguration } from "../settings/ApiOptions"
 import Announcement from "./Announcement"
@@ -38,13 +39,22 @@ interface ChatViewProps {
 	showAnnouncement: boolean
 	hideAnnouncement: () => void
 	showHistoryView: () => void
+	sessionSharedSecret: string | null // E2EE Prop
+	isSodiumReady: boolean // E2EE Prop
 }
 
 export const MAX_IMAGES_PER_MESSAGE = 20 // Anthropic limits to 20 images
 
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0
 
-const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryView }: ChatViewProps) => {
+const ChatView = ({
+	isHidden,
+	showAnnouncement,
+	hideAnnouncement,
+	showHistoryView,
+	sessionSharedSecret, // Destructure E2EE prop
+	isSodiumReady, // Destructure E2EE prop
+}: ChatViewProps) => {
 	const { t } = useAppTranslation()
 	const modeShortcutText = `${isMac ? "⌘" : "Ctrl"} + . ${t("chat:forNextMode")}`
 	const {
@@ -103,6 +113,46 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 	// (since it relies on the content of these messages, we are deep comparing. i.e. the button state after hitting button sets enableButtons to false, and this effect otherwise would have to true again even if messages didn't change
 	const lastMessage = useMemo(() => messages.at(-1), [messages])
 	const secondLastMessage = useMemo(() => messages.at(-2), [messages])
+
+	// --- E2EE Helper ---
+	const postEncryptedMessage = useCallback(
+		async (message: any) => {
+			// List of message types that should NOT be encrypted from webview->extension
+			const unencryptedTypes: Array<any["type"]> = [
+				"pairingRequest",
+				"pairingSuccess",
+				"sessionHello",
+				"webviewDidLaunch", // Initial message
+				"firebaseIdToken", // Auth token
+				// Add others if needed
+			]
+
+			if (sessionSharedSecret && isSodiumReady && !unencryptedTypes.includes(message.type)) {
+				try {
+					console.log(`E2EE: Encrypting outgoing message type: ${message.type}`)
+					const payloadToEncrypt = JSON.stringify(message)
+					const encryptedPayload = await encryptMessage(payloadToEncrypt, sessionSharedSecret)
+					vscode.postMessage({
+						type: "encryptedMessage",
+						encryptedPayload: encryptedPayload,
+					})
+					console.log("E2EE: Sent encrypted message.")
+				} catch (error) {
+					console.error(`E2EE Error encrypting message: ${error}. Sending plaintext.`)
+					// Fallback to plaintext if encryption fails
+					vscode.postMessage(message)
+				}
+			} else {
+				console.log(
+					`[postMessage] Sending plaintext (${
+						sessionSharedSecret ? "type excluded" : "no session"
+					}):`, message)
+				vscode.postMessage(message)
+			}
+		},
+		[sessionSharedSecret, isSodiumReady],
+	)
+	// --- E2EE Helper End ---
 
 	function playSound(audioType: AudioType) {
 		vscode.postMessage({ type: "playSound", audioType })
@@ -333,7 +383,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 			text = text.trim()
 			if (text || images.length > 0) {
 				if (messages.length === 0) {
-					vscode.postMessage({ type: "newTask", text, images })
+					postEncryptedMessage({ type: "newTask", text, images }) // Use helper
 				} else if (clineAsk) {
 					switch (clineAsk) {
 						case "followup":
@@ -346,7 +396,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 						case "resume_task":
 						case "resume_completed_task":
 						case "mistake_limit_reached":
-							vscode.postMessage({ type: "askResponse", askResponse: "messageResponse", text, images })
+							postEncryptedMessage({ type: "askResponse", askResponse: "messageResponse", text, images }) // Use helper
 							break
 						// There is no other case that a textfield should be enabled.
 					}
@@ -354,7 +404,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 				handleChatReset()
 			}
 		},
-		[messages.length, clineAsk, handleChatReset],
+		[messages.length, clineAsk, handleChatReset, postEncryptedMessage], // Add postEncryptedMessage dependency
 	)
 
 	const handleSetChatBoxMessage = useCallback(
@@ -372,8 +422,8 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 	)
 
 	const startNewTask = useCallback(() => {
-		vscode.postMessage({ type: "clearTask" })
-	}, [])
+		postEncryptedMessage({ type: "clearTask" }) // Use helper
+	}, [postEncryptedMessage]) // Add dependency
 
 	/*
 	This logic depends on the useEffect[messages] above to set clineAsk, after which buttons are shown and we then send an askResponse to the extension.
@@ -392,14 +442,14 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 				case "mistake_limit_reached":
 					// Only send text/images if they exist
 					if (trimmedInput || (images && images.length > 0)) {
-						vscode.postMessage({
+						postEncryptedMessage({ // Use helper
 							type: "askResponse",
 							askResponse: "yesButtonClicked",
 							text: trimmedInput,
 							images: images,
 						})
 					} else {
-						vscode.postMessage({
+						postEncryptedMessage({ // Use helper
 							type: "askResponse",
 							askResponse: "yesButtonClicked",
 						})
@@ -419,7 +469,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 			setEnableButtons(false)
 			disableAutoScrollRef.current = false
 		},
-		[clineAsk, startNewTask],
+		[clineAsk, startNewTask, postEncryptedMessage], // Add dependency
 	)
 
 	const handleSecondaryButtonClick = useCallback(

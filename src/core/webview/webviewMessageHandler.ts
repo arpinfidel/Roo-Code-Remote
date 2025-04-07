@@ -9,6 +9,11 @@ import { changeLanguage, t } from "../../i18n"
 import { ApiConfiguration } from "../../shared/api"
 import { supportPrompt } from "../../shared/support-prompt"
 import { GlobalFileNames } from "../../shared/globalFileNames"
+import { generatePairingCode, calculateVerificationValue } from "../../services/crypto/cryptoUtils" // E2EE imports
+const WEBVIEW_PUBLIC_KEY_STATE = "cline.e2ee.webviewPublicKey" // E2EE storage key
+
+import { calculateServerSharedSecret, decryptMessage } from "../../services/crypto/cryptoUtils" // E2EE session key calculation & decryption
+const EXTENSION_PRIVATE_KEY_SECRET = "cline.e2ee.extensionPrivateKey" // E2EE storage key
 
 import { checkoutDiffPayloadSchema, checkoutRestorePayloadSchema, WebviewMessage } from "../../shared/WebviewMessage"
 import { checkExistKey } from "../../shared/checkExistApiConfig"
@@ -44,6 +49,33 @@ import { buildApiHandler } from "../../api"
 
 export const webviewMessageHandler = async (provider: ClineProvider, message: WebviewMessage) => {
 	switch (message.type) {
+		// --- E2EE Decryption Start ---
+		case "encryptedMessage": {
+			if (!provider.sessionSharedSecret) {
+				provider.outputChannel.appendLine("E2EE Error: Received encrypted message but no session secret established.")
+				// Maybe request re-pairing or session re-establishment?
+				break
+			}
+			if (!message.encryptedPayload) {
+				provider.outputChannel.appendLine("E2EE Error: Received encryptedMessage type with no payload.")
+				break
+			}
+			try {
+				provider.outputChannel.appendLine("E2EE: Decrypting incoming message...")
+				const decryptedPayloadString = await decryptMessage(message.encryptedPayload, provider.sessionSharedSecret)
+				const innerMessage = JSON.parse(decryptedPayloadString) as WebviewMessage
+				provider.outputChannel.appendLine(`E2EE: Decrypted message type: ${innerMessage.type}`)
+				// Re-process the decrypted message
+				// Use a setTimeout to avoid potential call stack issues if the inner message also triggers processing
+				setTimeout(() => webviewMessageHandler(provider, innerMessage), 0)
+			} catch (error) {
+				provider.outputChannel.appendLine(`E2EE Error decrypting message: ${error}`)
+				// Handle decryption failure (e.g., log, notify user, potentially reset session)
+			}
+			break // Stop processing the outer encryptedMessage wrapper
+		}
+		// --- E2EE Decryption End ---
+
 		// Handle Firebase ID token separately
 		case "firebaseIdToken":
 			// Store the token temporarily for WebSocket connection
@@ -59,6 +91,135 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				vscode.window.showErrorMessage("Cannot connect WebSocket: Adapter not initialized.")
 			}
 			break
+
+		// --- E2EE Pairing Start ---
+		case "pairingRequest": {
+			const webviewPublicKey = message.text
+			if (!webviewPublicKey) {
+				provider.outputChannel.appendLine("E2EE Error: Received pairing request without public key.")
+				vscode.window.showErrorMessage("Pairing failed: Invalid request from webview.")
+				break
+			}
+			if (!provider.extensionPublicKey) {
+				provider.outputChannel.appendLine("E2EE Error: Extension public key not available for pairing.")
+				vscode.window.showErrorMessage("Pairing failed: Extension encryption keys not initialized.")
+				break
+			}
+
+			try {
+				provider.outputChannel.appendLine(`E2EE: Received pairing request with webview key: ${webviewPublicKey.substring(0, 10)}...`)
+				// Store webview key temporarily (associated with provider instance)
+				provider.pendingWebviewPublicKey = webviewPublicKey
+
+				const pairingCode = await generatePairingCode()
+				provider.outputChannel.appendLine(`E2EE: Generated pairing code: ${pairingCode}`)
+
+				// Show code to user (non-modal)
+				vscode.window.showInformationMessage(`Your Roo pairing code is: ${pairingCode}`, { modal: false })
+
+				const verificationValue = await calculateVerificationValue(
+					provider.extensionPublicKey,
+					webviewPublicKey,
+					pairingCode,
+				)
+				provider.outputChannel.appendLine(`E2EE: Calculated verification value: ${verificationValue.substring(0, 10)}...`)
+
+				// Send challenge back to webview
+				await provider.postMessageToWebview({
+					type: "pairingChallenge",
+					extensionPublicKey: provider.extensionPublicKey,
+					verificationValue: verificationValue,
+				})
+				provider.outputChannel.appendLine("E2EE: Sent pairing challenge to webview.")
+			} catch (error) {
+				provider.outputChannel.appendLine(`E2EE Error during pairing request: ${error}`)
+				vscode.window.showErrorMessage(`Pairing failed: ${error}`)
+				provider.pendingWebviewPublicKey = null // Clear temporary key on error
+			}
+			break
+		}
+		case "pairingSuccess": {
+			provider.outputChannel.appendLine("E2EE: Received pairing success message from webview.")
+			if (!provider.pendingWebviewPublicKey) {
+				provider.outputChannel.appendLine("E2EE Error: Received pairing success but no pending webview key found.")
+				vscode.window.showErrorMessage("Pairing confirmation failed: No pending request.")
+				break
+			}
+
+			try {
+				// Persist the webview public key
+				await provider.context.globalState.update(WEBVIEW_PUBLIC_KEY_STATE, provider.pendingWebviewPublicKey)
+				provider.outputChannel.appendLine(`E2EE: Successfully paired and stored webview public key: ${provider.pendingWebviewPublicKey.substring(0, 10)}...`)
+				provider.pendingWebviewPublicKey = null // Clear temporary key
+
+				// TODO: Trigger session key exchange immediately after successful pairing?
+				// TODO: Send updated state to webview indicating "paired" status
+				await provider.postMessageToWebview({ type: "pairingStatus", status: "paired" }) // Inform webview
+				vscode.window.showInformationMessage("Roo successfully paired with the webview.")
+
+			} catch (error) {
+				provider.outputChannel.appendLine(`E2EE Error storing webview public key: ${error}`)
+				vscode.window.showErrorMessage(`Pairing failed during finalization: ${error}`)
+				provider.pendingWebviewPublicKey = null // Clear temporary key on error
+			}
+			break
+		}
+		// --- E2EE Pairing End ---
+
+		// --- E2EE Session Key Exchange Start ---
+		case "sessionHello": {
+			const webviewPublicKey = message.text // Webview sends its public key again
+			if (!webviewPublicKey) {
+				provider.outputChannel.appendLine("E2EE Error: Received sessionHello without public key.")
+				break
+			}
+			if (!provider.extensionPublicKey) {
+				provider.outputChannel.appendLine("E2EE Error: Extension public key not available for session exchange.")
+				break
+			}
+
+			// Retrieve stored keys
+			const storedWebviewPublicKey = provider.context.globalState.get<string>(WEBVIEW_PUBLIC_KEY_STATE)
+			const extensionPrivateKey = await provider.context.secrets.get(EXTENSION_PRIVATE_KEY_SECRET)
+
+			if (!storedWebviewPublicKey || !extensionPrivateKey) {
+				provider.outputChannel.appendLine("E2EE Error: Missing stored keys for session exchange.")
+				// TODO: Maybe trigger re-pairing?
+				break
+			}
+
+			// Optional: Verify the received webviewPublicKey matches the stored one
+			if (webviewPublicKey !== storedWebviewPublicKey) {
+				provider.outputChannel.appendLine("E2EE Error: Received sessionHello public key does not match stored key.")
+				// This could indicate an issue or attack attempt.
+				break
+			}
+
+			try {
+				provider.outputChannel.appendLine("E2EE: Calculating session shared secret (server side)...")
+				const sharedSecret = await calculateServerSharedSecret(
+					extensionPrivateKey,
+					provider.extensionPublicKey,
+					storedWebviewPublicKey,
+				)
+				provider.sessionSharedSecret = sharedSecret // Store the secret on the provider instance
+				provider.outputChannel.appendLine("E2EE: Session shared secret calculated and stored.")
+
+				// Acknowledge and send extension's public key back
+				await provider.postMessageToWebview({
+					type: "sessionAck",
+					extensionPublicKey: provider.extensionPublicKey,
+				})
+				provider.outputChannel.appendLine("E2EE: Sent sessionAck to webview.")
+
+			} catch (error) {
+				provider.outputChannel.appendLine(`E2EE Error calculating/storing session secret: ${error}`)
+				provider.sessionSharedSecret = null // Clear secret on error
+				// TODO: Inform webview of session failure?
+			}
+			break
+		}
+		// --- E2EE Session Key Exchange End ---
 
 		// Existing cases below...
 		case "webviewDidLaunch":

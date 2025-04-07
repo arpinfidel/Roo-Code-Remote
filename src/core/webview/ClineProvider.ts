@@ -39,6 +39,7 @@ import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
 import { fileExistsAtPath } from "../../utils/fs"
+import { encryptMessage } from "../../services/crypto/cryptoUtils" // E2EE Encryption
 import { setSoundEnabled } from "../../utils/sound"
 import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 import { ContextProxy } from "../config/ContextProxy"
@@ -93,14 +94,18 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	public readonly customModesManager: CustomModesManager
 	private firebaseIdToken: string | null = null // Add property to store Firebase ID token
 	public webSocketAdapter?: WebSocketApiAdapter // Add property to hold the adapter instance
-
+	public readonly extensionPublicKey: string | null // E2EE public key passed from extension.ts
+	public pendingWebviewPublicKey: string | null = null // Temporarily store webview key during pairing
+	public sessionSharedSecret: string | null = null // Store the calculated session secret
 	constructor(
 		readonly context: vscode.ExtensionContext,
 		// not private, so it can be accessed from webviewMessageHandler
 		readonly outputChannel: vscode.OutputChannel,
 		private readonly renderContext: "sidebar" | "editor" = "sidebar",
+		extensionPublicKey: string | null, // Receive E2EE public key
 	) {
 		super()
+		this.extensionPublicKey = extensionPublicKey // Store the key
 
 		this.outputChannel.appendLine("ClineProvider instantiated")
 		this.contextProxy = new ContextProxy(context)
@@ -569,8 +574,46 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	}
 
 	public async postMessageToWebview(message: ExtensionMessage) {
-		await this.view?.webview.postMessage(message)
-		this.outputChannel.appendLine(`[postMessageToWebview] ${JSON.stringify(message)}`)
+		// List of message types that should NOT be encrypted
+		const unencryptedTypes: Array<ExtensionMessage["type"]> = [
+			"pairingChallenge",
+			"pairingStatus",
+			"sessionAck",
+			"state", // State might contain sensitive info, but encrypting it could complicate webview hydration. Revisit if needed.
+			"theme", // Theme doesn't need encryption
+			"websocketState", // Simple status update
+			// Add other types if they should always be plaintext
+		]
+
+		let messageToSend = message
+
+		// Encrypt if session secret exists and type is not excluded
+		if (this.sessionSharedSecret && !unencryptedTypes.includes(message.type)) {
+			try {
+				this.outputChannel.appendLine(`E2EE: Encrypting message of type: ${message.type}`)
+				const payloadToEncrypt = JSON.stringify(message)
+				const encryptedPayload = await encryptMessage(payloadToEncrypt, this.sessionSharedSecret)
+				messageToSend = {
+					type: "encryptedMessage",
+					encryptedPayload: encryptedPayload,
+				}
+				this.outputChannel.appendLine(`E2EE: Sending encrypted message.`)
+			} catch (error) {
+				this.outputChannel.appendLine(`E2EE Error encrypting message: ${error}. Sending plaintext.`)
+				// Fallback to sending plaintext if encryption fails
+				messageToSend = message
+			}
+		} else {
+			this.outputChannel.appendLine(
+				`[postMessageToWebview] Sending plaintext (${
+					this.sessionSharedSecret ? "type excluded" : "no session"
+				}): ${JSON.stringify(message)}`,
+			)
+		}
+
+		await this.view?.webview.postMessage(messageToSend)
+		// Note: Emitting the original message for internal listeners might be desired,
+		// or potentially the encrypted one depending on listener needs. Sticking with original for now.
 		this.emit("messageToWebview", message)
 	}
 

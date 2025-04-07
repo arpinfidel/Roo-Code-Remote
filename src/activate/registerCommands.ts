@@ -38,6 +38,7 @@ export type RegisterCommandOptions = {
 	context: vscode.ExtensionContext
 	outputChannel: vscode.OutputChannel
 	provider: ClineProvider
+	extensionPublicKey: string | null // Add E2EE public key
 }
 
 export const registerCommands = (options: RegisterCommandOptions) => {
@@ -48,7 +49,7 @@ export const registerCommands = (options: RegisterCommandOptions) => {
 	}
 }
 
-const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOptions) => {
+const getCommandsMap = ({ context, outputChannel, provider, extensionPublicKey }: RegisterCommandOptions) => {
 	return {
 		"roo-cline.activationCompleted": () => {},
 		"roo-cline.plusButtonClicked": async () => {
@@ -62,8 +63,8 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 		"roo-cline.promptsButtonClicked": () => {
 			provider.postMessageToWebview({ type: "action", action: "promptsButtonClicked" })
 		},
-		"roo-cline.popoutButtonClicked": () => openClineInNewTab({ context, outputChannel }),
-		"roo-cline.openInNewTab": () => openClineInNewTab({ context, outputChannel }),
+		"roo-cline.popoutButtonClicked": () => openClineInNewTab({ context, outputChannel, extensionPublicKey }),
+		"roo-cline.openInNewTab": () => openClineInNewTab({ context, outputChannel, extensionPublicKey }),
 		"roo-cline.settingsButtonClicked": () => {
 			provider.postMessageToWebview({ type: "action", action: "settingsButtonClicked" })
 		},
@@ -95,12 +96,16 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 	}
 }
 
-const openClineInNewTab = async ({ context, outputChannel }: Omit<RegisterCommandOptions, "provider">) => {
+const openClineInNewTab = async ({
+	context,
+	outputChannel,
+	extensionPublicKey, // Receive the key
+}: Omit<RegisterCommandOptions, "provider"> & { extensionPublicKey: string | null }) => {
 	// (This example uses webviewProvider activation event which is necessary to
 	// deserialize cached webview, but since we use retainContextWhenHidden, we
 	// don't need to use that event).
 	// https://github.com/microsoft/vscode-extension-samples/blob/main/webview-sample/src/extension.ts
-	const tabProvider = new ClineProvider(context, outputChannel, "editor")
+	const tabProvider = new ClineProvider(context, outputChannel, "editor", extensionPublicKey) // Pass the key
 	const lastCol = Math.max(...vscode.window.visibleTextEditors.map((editor) => editor.viewColumn || 0))
 
 	// Check if there are any visible text editors, otherwise open a new group

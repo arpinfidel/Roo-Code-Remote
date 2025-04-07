@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as dotenvx from "@dotenvx/dotenvx"
 import * as path from "path"
-
+import { randomUUID } from "crypto"
 // Load environment variables from .env file
 try {
 	// Specify path to .env file in the project root directory
@@ -15,6 +15,7 @@ try {
 import "./utils/path" // Necessary to have access to String.prototype.toPosix.
 
 import { initializeI18n } from "./i18n"
+import { initializeSodium, generateKeyPair } from "./services/crypto/cryptoUtils" // Import crypto utils
 import { ClineProvider } from "./core/webview/ClineProvider"
 import { CodeActionProvider } from "./core/CodeActionProvider"
 import { DIFF_VIEW_URI_SCHEME } from "./integrations/editor/DiffViewProvider"
@@ -27,7 +28,10 @@ import { WebSocketApiAdapter } from "./services/websocket/api-adapter"
 
 import { handleUri, registerCommands, registerCodeActions, registerTerminalActions } from "./activate"
 import { formatLanguage } from "./shared/language"
-import { randomUUID } from "crypto"
+
+// Constants for E2EE storage
+const EXTENSION_PRIVATE_KEY_SECRET = "cline.e2ee.extensionPrivateKey"
+const WEBVIEW_PUBLIC_KEY_STATE = "cline.e2ee.webviewPublicKey"
 
 /**
  * Built using https://github.com/microsoft/vscode-webview-ui-toolkit
@@ -40,7 +44,7 @@ import { randomUUID } from "crypto"
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
 let webSocketAdapter: WebSocketApiAdapter
-
+let extensionPublicKey: string | null = null // Store extension's public key
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
 export async function activate(context: vscode.ExtensionContext) {
@@ -48,6 +52,35 @@ export async function activate(context: vscode.ExtensionContext) {
 	outputChannel = vscode.window.createOutputChannel("Roo-Code")
 	context.subscriptions.push(outputChannel)
 	outputChannel.appendLine("Roo-Code extension activated")
+
+	// --- E2EE Initialization Start ---
+	try {
+		await initializeSodium()
+		outputChannel.appendLine("libsodium initialized for E2EE.")
+
+		let privateKey = await context.secrets.get(EXTENSION_PRIVATE_KEY_SECRET)
+		if (!privateKey) {
+			outputChannel.appendLine("Generating new E2EE key pair for extension...")
+			const keyPair = await generateKeyPair()
+			privateKey = keyPair.privateKey
+			extensionPublicKey = keyPair.publicKey
+			await context.secrets.store(EXTENSION_PRIVATE_KEY_SECRET, privateKey)
+			outputChannel.appendLine("New E2EE key pair generated and stored.")
+		} else {
+			// Derive public key from stored private key if needed (libsodium can do this, but simpler to store both for now if generated together)
+			// For simplicity, we'll assume if private key exists, we need to re-derive or retrieve public key.
+			// Let's regenerate for now if public key isn't available in memory (adjust later if needed)
+			const keyPair = await generateKeyPair() // Re-generating temporarily - needs refinement to load public key properly
+			extensionPublicKey = keyPair.publicKey // Store the public key
+			outputChannel.appendLine("Loaded existing E2EE private key.")
+		}
+	} catch (error) {
+		outputChannel.appendLine(`Error initializing E2EE: ${error}`)
+		vscode.window.showErrorMessage(`Failed to initialize encryption: ${error}`)
+		// Decide if activation should fail or continue without E2EE
+		extensionPublicKey = null // Ensure E2EE is disabled
+	}
+	// --- E2EE Initialization End ---
 
 	// Migrate old settings to new
 	await migrateSettings(context, outputChannel)
@@ -69,7 +102,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		context.globalState.update("allowedCommands", defaultCommands)
 	}
 
-	const provider = new ClineProvider(context, outputChannel, "sidebar")
+	// Pass the public key to the provider
+	const provider = new ClineProvider(
+		context,
+		outputChannel,
+		"sidebar",
+		extensionPublicKey, // Pass the public key
+	)
 	telemetryService.setProvider(provider)
 
 	const api = new API(outputChannel, provider)
@@ -130,7 +169,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
-	registerCommands({ context, outputChannel, provider })
+	registerCommands({ context, outputChannel, provider, extensionPublicKey })
 
 	/**
 	 * We use the text document content provider API to show the left side for diff

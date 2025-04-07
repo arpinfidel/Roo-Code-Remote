@@ -127,6 +127,10 @@ export interface WebviewMessage {
 		| "requestLogin"
 		| "firebaseIdToken"
 		| "connectWebSocket" // Add type for manual connection trigger
+		| "pairingRequest" // E2EE: Webview initiates pairing
+		| "pairingSuccess" // E2EE: Webview confirms successful verification
+		| "sessionHello" // E2EE: Webview initiates session key exchange
+		| "encryptedMessage" // E2EE: Contains encrypted payload
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse
@@ -152,6 +156,7 @@ export interface WebviewMessage {
 	source?: "global" | "project"
 	requestId?: string
 	ids?: string[]
+	encryptedPayload?: string // E2EE: For encryptedMessage type
 }
 
 export const checkoutDiffPayloadSchema = z.object({
