@@ -60,6 +60,7 @@ if (typeof acquireVsCodeApi === "undefined") {
 }
 
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
+type WebSocketState = "connecting" | "connected" | "disconnected" | "error"
 
 const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]>, Tab>> = {
 	chatButtonClicked: "chat",
@@ -72,6 +73,7 @@ const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]
 
 const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	const [tab, setTab] = useState<Tab>("chat")
+	const [webSocketState, setWebSocketState] = useState<WebSocketState>("disconnected") // Add state for WS
 	const [showAnnouncement, setShowAnnouncement] = useState(false)
 	const [humanRelayDialogState, setHumanRelayDialogState] = useState<{
 		isOpen: boolean
@@ -112,8 +114,13 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 				const { requestId, promptText } = message
 				setHumanRelayDialogState({ isOpen: true, requestId, promptText })
 			}
+
+			// Handle WebSocket state updates
+			if (message.type === "websocketState" && message.websocketState) {
+				setWebSocketState(message.websocketState)
+			}
 		},
-		[switchTab],
+		[switchTab], // Keep dependencies minimal, state setters are stable
 	)
 	useEvent("message", onMessage) // Register message handler here
 
@@ -170,7 +177,7 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	// The original return statement when showWelcome is false
 	return (
 		<div className="flex flex-col h-screen">
-			<NavigationBar activeTab={tab} onTabChange={switchTab} user={user} />
+			<NavigationBar activeTab={tab} onTabChange={switchTab} user={user} webSocketState={webSocketState} />
 			<div className="flex-1 overflow-auto">
 				{/* Render components based on internal tab state */}
 				{tab === "prompts" && <PromptsView onDone={() => switchTab("chat")} />}

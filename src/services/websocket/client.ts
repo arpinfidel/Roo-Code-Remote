@@ -37,6 +37,7 @@ export class WebSocketClient extends EventEmitter {
 			console.log("Attempting WebSocket connection to:", this.url)
 
 			this.connectionState = "connecting"
+			this.emit("connecting") // Emit connecting state
 
 			// Get the Firebase ID token from the provider
 			const firebaseIdToken = this.config.provider.getFirebaseIdToken()
@@ -82,9 +83,14 @@ export class WebSocketClient extends EventEmitter {
 			})
 
 			this.socket.on("error", (err: Error) => {
-				this.connectionState = "disconnected"
+				const wasConnecting = this.connectionState === "connecting"
+				this.connectionState = "disconnected" // Treat error as disconnected
 				console.error("WebSocket error:", err)
-				this.emit("error", err)
+				this.emit("error", err) // Emit the specific error
+				// If it failed while connecting, also emit disconnected to reset UI
+				if (wasConnecting) {
+					this.emit("disconnected")
+				}
 				reject(err)
 			})
 		})

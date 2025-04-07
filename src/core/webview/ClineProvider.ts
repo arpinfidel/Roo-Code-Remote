@@ -60,9 +60,12 @@ import { WebSocketApiAdapter } from "../../services/websocket/api-adapter" // Im
  * https://github.com/KumarVariable/vscode-extension-sidebar-html/blob/master/src/customSidebarViewProvider.ts
  */
 
+export type WebSocketState = "connecting" | "connected" | "disconnected" | "error"
+
 export type ClineProviderEvents = {
 	clineCreated: [cline: Cline]
 	messageToWebview: [message: ExtensionMessage]
+	websocketStateChange: [state: WebSocketState] // Add event for WS state changes
 }
 
 export class ClineProvider extends EventEmitter<ClineProviderEvents> implements vscode.WebviewViewProvider {
@@ -123,6 +126,11 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 			.catch((error) => {
 				this.outputChannel.appendLine(`Failed to initialize MCP Hub: ${error}`)
 			})
+
+		// Listen for WebSocket state changes and forward to webview
+		this.on("websocketStateChange", (state) => {
+			this.postMessageToWebview({ type: "websocketState", websocketState: state })
+		})
 	}
 
 	// Adds a new Cline instance to clineStack, marking the start of a new task.
@@ -1507,5 +1515,11 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	// Method to set the WebSocket adapter instance
 	public setWebSocketAdapter(adapter: WebSocketApiAdapter) {
 		this.webSocketAdapter = adapter
+	}
+
+	// Method for WebSocketApiAdapter to notify provider of state changes
+	public notifyWebSocketStateChange(state: WebSocketState) {
+		this.log(`WebSocket state changed: ${state}`)
+		this.emit("websocketStateChange", state)
 	}
 }

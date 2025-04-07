@@ -5,13 +5,16 @@ import { useFirebase } from "../../context/FirebaseContext"
 
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 
+type WebSocketState = "connecting" | "connected" | "disconnected" | "error"
+
 type NavigationBarProps = {
 	activeTab: Tab
 	onTabChange: (tab: Tab) => void
 	user: any
+	webSocketState?: WebSocketState
 }
 
-export const NavigationBar = ({ activeTab, onTabChange, user }: NavigationBarProps) => {
+export const NavigationBar = ({ activeTab, onTabChange, user, webSocketState }: NavigationBarProps) => {
 	const { auth } = useFirebase()
 	const isStandalone = typeof acquireVsCodeApi === "undefined" // Added check
 	const navigate = useNavigate()
@@ -54,11 +57,28 @@ export const NavigationBar = ({ activeTab, onTabChange, user }: NavigationBarPro
 				{/* Connect Button (Only in Extension) */}
 				{!isStandalone && (
 					<button
-						className="p-2 rounded hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground"
+						className={`p-2 rounded ${
+							webSocketState === "connected"
+								? "bg-vscode-button-secondaryBackground text-vscode-button-foreground" // Style for connected
+								: "hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground" // Default style
+						}`}
 						onClick={() => vscode.postMessage({ type: "connectWebSocket" })}
-						title="Connect WebSocket">
-						{/* Using a simple text label for now */}
-						<span className="text-xs">Connect WS</span>
+						title={
+							webSocketState === "connected"
+								? "Connected"
+								: webSocketState === "connecting"
+									? "Connecting..."
+									: "Connect WebSocket" // Default/Disconnected/Error title
+						}
+						disabled={webSocketState === "connecting" || webSocketState === "connected"}>
+						<span className="text-xs">
+							{webSocketState === "connected"
+								? "Connected" // Text when connected
+								: webSocketState === "connecting"
+									? "Connecting..." // Text when connecting
+									: "Connect WS"}{" "}
+							{/* Default/Disconnected/Error text */}
+						</span>
 					</button>
 				)}
 				<button

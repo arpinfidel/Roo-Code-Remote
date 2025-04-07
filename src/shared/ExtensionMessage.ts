@@ -29,6 +29,8 @@ export interface LanguageModelChatSelector {
 // Represents JSON data that is sent from extension to webview, called
 // ExtensionMessage and has 'type' enum which can be 'plusButtonClicked' or
 // 'settingsButtonClicked' or 'hello'. Webview will hold state.
+export type WebSocketState = "connecting" | "connected" | "disconnected" | "error"
+
 export interface ExtensionMessage {
 	type:
 		| "action"
@@ -70,6 +72,7 @@ export interface ExtensionMessage {
 		| "fileSearchResults"
 		| "toggleApiConfigPin"
 		| "setToken"
+		| "websocketState"
 	text?: string
 	action?:
 		| "chatButtonClicked"
@@ -82,6 +85,7 @@ export interface ExtensionMessage {
 		| "helpButtonClicked"
 		| "plusButtonClicked"
 	invoke?: "newChat" | "sendMessage" | "primaryButtonClick" | "secondaryButtonClick" | "setChatBoxMessage"
+	websocketState?: WebSocketState
 	state?: ExtensionState
 	images?: string[]
 	ollamaModels?: string[]

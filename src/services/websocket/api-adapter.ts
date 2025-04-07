@@ -24,6 +24,21 @@ export class WebSocketApiAdapter {
 			sessionId: config.sessionId,
 		})
 		this.wsClient = wsClient
+
+		// Setup state change listeners
+		this.wsClient.on("connecting", () => {
+			this.api.getProvider()?.notifyWebSocketStateChange("connecting")
+		})
+		this.wsClient.on("connected", () => {
+			this.api.getProvider()?.notifyWebSocketStateChange("connected")
+		})
+		this.wsClient.on("disconnected", () => {
+			this.api.getProvider()?.notifyWebSocketStateChange("disconnected")
+		})
+		this.wsClient.on("error", () => {
+			this.api.getProvider()?.notifyWebSocketStateChange("error")
+		})
+
 		// Only connect automatically if clientType is 'webui'
 		if (this.config.clientType === "webui") {
 			this.setupConnection()
