@@ -1,8 +1,10 @@
 import * as vscode from "vscode"
+import { ClineProvider } from "../../core/webview/ClineProvider" // Import ClineProvider
 
 export interface WebSocketConfig {
 	serverUrl: string
-	authToken: string
+	// authToken: string // Remove static auth token
+	provider: ClineProvider // Add provider to get the token dynamically
 	reconnectInterval: number
 	maxRetries: number
 	autoConnect?: boolean

@@ -125,6 +125,8 @@ export interface WebviewMessage {
 		| "helpButtonClicked"
 		| "plusButtonClicked"
 		| "requestLogin"
+		| "firebaseIdToken"
+		| "connectWebSocket" // Add type for manual connection trigger
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse

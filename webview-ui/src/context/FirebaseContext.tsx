@@ -1,9 +1,10 @@
 import { initializeApp, FirebaseApp } from "firebase/app"
 import { getAnalytics, Analytics } from "firebase/analytics"
-import { getAuth, Auth, signInWithCustomToken } from "firebase/auth"
+import { getAuth, Auth, signInWithCustomToken, User } from "firebase/auth"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useEvent } from "react-use"
 import { ExtensionMessage } from "../../../src/shared/ExtensionMessage"
+import { vscode } from "../utils/vscode" // Import the vscode utility
 
 // Firebase configuration
 const firebaseConfig = {
@@ -20,12 +21,18 @@ interface FirebaseContextValue {
 	app: FirebaseApp
 	analytics: Analytics
 	auth: Auth
+	user: User | null
+	isAuthenticated: boolean
+	authChecked: boolean
 }
 
 const FirebaseContext = createContext<FirebaseContextValue | null>(null)
 
 export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 	const [firebase, setFirebase] = useState<FirebaseContextValue | null>(null)
+	const [user, setUser] = useState<User | null>(null)
+	const [isAuthenticated, setIsAuthenticated] = useState(false)
+	const [authChecked, setAuthChecked] = useState(false)
 
 	useEffect(() => {
 		// Initialize Firebase
@@ -33,12 +40,36 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 		const analytics = getAnalytics(app)
 		const auth = getAuth(app)
 
-		setFirebase({ app, analytics, auth })
+		// Set up auth state listener to properly track authentication status
+		const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+			setUser(currentUser)
+			setIsAuthenticated(!!currentUser)
+			setAuthChecked(true)
+			if (currentUser) {
+				console.log("User authenticated:", currentUser.uid)
+				// Get the ID token and send it to the extension
+				currentUser
+					.getIdToken(true)
+					.then((idToken) => {
+						vscode.postMessage({ type: "firebaseIdToken", text: idToken })
+					})
+					.catch((error) => {
+						console.error("Error getting ID token:", error)
+					})
+			} else {
+				console.log("User not authenticated")
+				// Optionally send a null token or clear message
+				vscode.postMessage({ type: "firebaseIdToken", text: "" })
+			}
+		})
+
+		setFirebase({ app, analytics, auth, user, isAuthenticated, authChecked })
 
 		return () => {
-			// Cleanup if needed
+			// Cleanup auth listener on unmount
+			unsubscribe()
 		}
-	}, [])
+	}, [authChecked, isAuthenticated, user])
 
 	useEvent("message", (event: MessageEvent) => {
 		const data: ExtensionMessage = event.data
@@ -47,17 +78,40 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 			console.log(data.text)
 			if (firebase?.auth && data.text) {
 				signInWithCustomToken(firebase.auth, data.text)
-					.then(() => {
+					.then((userCredential) => {
 						console.log("logged in with custom token")
+						// Get the ID token after custom sign-in and send it
+						userCredential.user
+							.getIdToken(true)
+							.then((idToken) => {
+								vscode.postMessage({ type: "firebaseIdToken", text: idToken })
+							})
+							.catch((error) => {
+								console.error("Error getting ID token after custom sign-in:", error)
+							})
 					})
 					.catch((error) => {
 						console.log("error logging in with custom token", error)
 						console.log("error logging in with custom token", error.code)
 						console.log("error logging in with custom token", error.message)
+						// Optionally send a null token or error message
+						vscode.postMessage({ type: "firebaseIdToken", text: "" })
 					})
 			}
 		}
 	})
+
+	// Update the firebase context value when auth state changes
+	useEffect(() => {
+		if (firebase) {
+			setFirebase({
+				...firebase,
+				user,
+				isAuthenticated,
+				authChecked,
+			})
+		}
+	}, [user, isAuthenticated, authChecked, firebase])
 
 	if (!firebase) {
 		return null // Or loading indicator

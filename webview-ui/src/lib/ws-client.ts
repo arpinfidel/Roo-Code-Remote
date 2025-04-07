@@ -21,6 +21,7 @@ export class WsClient {
 	private url: URL = new URL("http://localhost")
 	private eventTarget = new EventTarget()
 	private sessionId: string | null = null
+	private authToken: string | null = null
 	private connectingPromise: Promise<void> | null = null
 
 	setURL(url: string) {
@@ -35,6 +36,10 @@ export class WsClient {
 
 	setSessionId(sessionId: string | null) {
 		this.sessionId = sessionId
+	}
+
+	setAuthToken(token: string | null) {
+		this.authToken = token
 	}
 
 	on(event: WsEvent, listener: (event: CustomEvent) => void) {
@@ -58,6 +63,9 @@ export class WsClient {
 		}
 		if (this.clientType) {
 			this.url.searchParams.set("client_type", this.clientType)
+		}
+		if (this.authToken) {
+			this.url.searchParams.set("auth_token", this.authToken)
 		}
 		this.connectingPromise = new Promise((resolve, reject) => {
 			if (this.status === "connected") {

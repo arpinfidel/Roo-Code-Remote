@@ -53,6 +53,7 @@ import { telemetryService } from "../../services/telemetry/TelemetryService"
 import { getWorkspacePath } from "../../utils/path"
 import { webviewMessageHandler } from "./webviewMessageHandler"
 import { WebviewMessage } from "../../shared/WebviewMessage"
+import { WebSocketApiAdapter } from "../../services/websocket/api-adapter" // Import WebSocketApiAdapter
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -87,6 +88,8 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	public readonly contextProxy: ContextProxy
 	public readonly providerSettingsManager: ProviderSettingsManager
 	public readonly customModesManager: CustomModesManager
+	private firebaseIdToken: string | null = null // Add property to store Firebase ID token
+	public webSocketAdapter?: WebSocketApiAdapter // Add property to hold the adapter instance
 
 	constructor(
 		readonly context: vscode.ExtensionContext,
@@ -571,7 +574,7 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 		try {
 			await axios.get(`http://${localServerUrl}`)
 		} catch (error) {
-			vscode.window.showErrorMessage(t("common:errors.hmr_not_running"))
+			vscode.window.showErrorMessage(t("common:errors.hmr_not_running") + " " + error)
 
 			return this.getHtmlContent(webview)
 		}
@@ -1487,5 +1490,22 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 		}
 
 		return properties
+	}
+
+	// Method to set the Firebase ID token
+	public setFirebaseIdToken(token: string | null) {
+		this.firebaseIdToken = token
+		this.log(`Firebase ID token ${token ? "received" : "cleared"}`)
+		// Potentially trigger WebSocket reconnection or update here if needed immediately
+	}
+
+	// Method to get the Firebase ID token
+	public getFirebaseIdToken(): string | null {
+		return this.firebaseIdToken
+	}
+
+	// Method to set the WebSocket adapter instance
+	public setWebSocketAdapter(adapter: WebSocketApiAdapter) {
+		this.webSocketAdapter = adapter
 	}
 }

@@ -7,6 +7,5 @@ type Config struct {
 	IsDevelopment     bool
 	HeartbeatInterval int
 	AllowedOrigins    []string
-	AuthToken         string
 	ReactDevServerURL string // Added for reverse proxy target in development
 }

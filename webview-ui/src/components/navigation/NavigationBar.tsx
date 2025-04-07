@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { PlusIcon, HistoryIcon, SettingsIcon, HelpIcon } from "../icons"
+import { PlusIcon, HistoryIcon, SettingsIcon } from "../icons"
 import { vscode } from "../../utils/vscode"
 import { useFirebase } from "../../context/FirebaseContext"
 
@@ -48,28 +48,25 @@ export const NavigationBar = ({ activeTab, onTabChange, user }: NavigationBarPro
 				</button>
 			</div>
 
-			<div className="flex space-x-2">
-				<button
-					className="p-2 rounded hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground"
-					onClick={() => vscode.postMessage({ type: "popoutButtonClicked" })}
-					title="Popout">
-					<span className="text-sm">↗</span>
-				</button>
-
+			<div className="flex space-x-2 items-center">
+				{" "}
+				{/* Added items-center */}
+				{/* Connect Button (Only in Extension) */}
+				{!isStandalone && (
+					<button
+						className="p-2 rounded hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground"
+						onClick={() => vscode.postMessage({ type: "connectWebSocket" })}
+						title="Connect WebSocket">
+						{/* Using a simple text label for now */}
+						<span className="text-xs">Connect WS</span>
+					</button>
+				)}
 				<button
 					className={`p-2 rounded hover:bg-vscode-button-secondaryHoverBackground ${activeTab === "settings" ? "text-vscode-button-foreground bg-vscode-button-secondaryBackground" : "text-vscode-foreground"}`}
 					onClick={() => onTabChange("settings")}
 					title="Settings">
 					<SettingsIcon className="w-5 h-5" />
 				</button>
-
-				<button
-					className="p-2 rounded hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground"
-					onClick={() => vscode.postMessage({ type: "helpButtonClicked" })}
-					title="Help">
-					<HelpIcon className="w-5 h-5" />
-				</button>
-
 				{user ? (
 					<div className="relative group">
 						<button className="flex items-center space-x-1 p-2 rounded hover:bg-vscode-button-secondaryHoverBackground">
@@ -105,7 +102,6 @@ export const NavigationBar = ({ activeTab, onTabChange, user }: NavigationBarPro
 						<div className="w-5 h-5" />
 					</button>
 				)}
-
 				{/* Conditionally add the 'X' button in standalone mode */}
 				{isStandalone && (
 					<Link

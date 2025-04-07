@@ -44,6 +44,23 @@ import { buildApiHandler } from "../../api"
 
 export const webviewMessageHandler = async (provider: ClineProvider, message: WebviewMessage) => {
 	switch (message.type) {
+		// Handle Firebase ID token separately
+		case "firebaseIdToken":
+			// Store the token temporarily for WebSocket connection
+			// TODO: Find a more permanent and secure way to manage this token if needed beyond initial connection
+			provider.setFirebaseIdToken(message.text ?? null) // Pass string or null
+			return // Stop processing here for this message type
+
+		case "connectWebSocket":
+			if (provider.webSocketAdapter) {
+				provider.webSocketAdapter.connectManually()
+			} else {
+				console.error("WebSocket adapter not available on provider.")
+				vscode.window.showErrorMessage("Cannot connect WebSocket: Adapter not initialized.")
+			}
+			break
+
+		// Existing cases below...
 		case "webviewDidLaunch":
 			// Load custom modes first
 			const customModes = await provider.customModesManager.getCustomModes()

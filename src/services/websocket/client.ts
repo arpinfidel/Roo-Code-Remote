@@ -38,9 +38,20 @@ export class WebSocketClient extends EventEmitter {
 
 			this.connectionState = "connecting"
 
+			// Get the Firebase ID token from the provider
+			const firebaseIdToken = this.config.provider.getFirebaseIdToken()
+
+			if (!firebaseIdToken) {
+				const errorMsg = "Firebase ID token not available. Cannot establish WebSocket connection."
+				console.error(errorMsg)
+				this.emit("error", new Error(errorMsg))
+				reject(new Error(errorMsg))
+				return // Stop connection attempt
+			}
+
 			this.socket = new WebSocket(this.url, {
 				headers: {
-					Authorization: `Bearer ${this.config.authToken}`,
+					Authorization: `Bearer ${firebaseIdToken}`, // Use Firebase token
 				},
 			})
 

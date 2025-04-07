@@ -39,7 +39,7 @@ import { randomUUID } from "crypto"
 
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
-let webSocketAdapter: WebSocketApiAdapter | null = null
+let webSocketAdapter: WebSocketApiAdapter
 
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
@@ -86,14 +86,27 @@ export async function activate(context: vscode.ExtensionContext) {
 		// Store the session ID in global state for later use
 		context.globalState.update("websocketSessionId", sessionId)
 
+		// The provider instance is needed to get the Firebase token dynamically
+		const provider = api.getProvider()
+		if (!provider) {
+			// Handle error: provider not available, cannot initialize WebSocket
+			vscode.window.showErrorMessage(
+				"Failed to get ClineProvider instance. WebSocket connection cannot be established.",
+			)
+			return // Or throw an error
+		}
+
 		webSocketAdapter = new WebSocketApiAdapter(api, {
 			serverUrl: config.get("websocket.serverUrl") || "",
-			authToken: config.get("websocket.authToken") || "",
+			provider: provider, // Pass the provider instance
 			reconnectInterval: config.get("websocket.reconnectInterval", 5000),
 			maxRetries: config.get("websocket.maxRetries", 5),
 			sessionId: sessionId,
 			clientType: "extension",
 		})
+
+		// Set the adapter instance on the provider
+		provider.setWebSocketAdapter(webSocketAdapter)
 
 		// Create a shareable session link
 		const serverUrl = config.get("websocket.serverUrl") as string
@@ -173,9 +186,4 @@ export async function deactivate() {
 
 	// Clean up terminal handlers
 	TerminalRegistry.cleanup()
-
-	// Clean up WebSocket connection
-	if (webSocketAdapter) {
-		webSocketAdapter = null
-	}
 }

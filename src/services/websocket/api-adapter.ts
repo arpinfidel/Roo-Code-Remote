@@ -10,25 +10,37 @@ import { ExtensionMessage } from "../../shared/ExtensionMessage"
 export class WebSocketApiAdapter {
 	private wsClient: WebSocketClient
 	private api: API
+	private config: WebSocketConfig // Store config
 
 	constructor(api: API, config: WebSocketConfig) {
 		this.api = api
+		this.config = config // Store config
 		const wsClient = new WebSocketClient({
 			serverUrl: config.serverUrl || "",
-			authToken: config.authToken || "",
+			provider: config.provider, // Pass provider instead of authToken
 			reconnectInterval: config.reconnectInterval || 5000,
 			maxRetries: config.maxRetries || 5,
 			clientType: "extension",
 			sessionId: config.sessionId,
 		})
 		this.wsClient = wsClient
-		this.setupConnection()
+		// Only connect automatically if clientType is 'webui'
+		if (this.config.clientType === "webui") {
+			this.setupConnection()
+		} else {
+			console.log("WebSocket connection deferred for manual initiation (extension mode).")
+		}
 	}
 
 	private setupConnection() {
-		this.wsClient.connect().catch((err) => {
-			vscode.window.showErrorMessage(`WebSocket connection unsuccessful: ${err.message} ${err}`)
-		})
+		this.wsClient
+			.connect()
+			.then(() => {
+				vscode.window.showInformationMessage(`WebSocket connection successful`)
+			})
+			.catch((err) => {
+				vscode.window.showErrorMessage(`WebSocket connection unsuccessful: ${err.message} ${err}`)
+			})
 
 		this.wsClient.on("message", (message: WebSocketMessage) => {
 			console.log("ws-client: received message", message)
@@ -59,6 +71,10 @@ export class WebSocketApiAdapter {
 					})
 					break
 			}
+		})
+
+		this.wsClient.on("error", (err) => {
+			vscode.window.showErrorMessage(`WebSocket connection error: ${err.message} ${err}`)
 		})
 	}
 
@@ -96,15 +112,34 @@ export class WebSocketApiAdapter {
 	}
 
 	public updateConfig(config: WebSocketConfig) {
+		this.config = config // Update stored config
 		this.wsClient.disconnect()
 		this.wsClient = new WebSocketClient({
 			serverUrl: config.serverUrl || "",
-			authToken: config.authToken || "",
+			provider: config.provider, // Pass provider instead of authToken
 			reconnectInterval: config.reconnectInterval || 5000,
 			maxRetries: config.maxRetries || 5,
 			clientType: "extension",
 			sessionId: config.sessionId,
 		})
+		// Only reconnect automatically if clientType is 'webui'
+		if (this.config.clientType === "webui") {
+			this.setupConnection()
+		} else {
+			console.log("WebSocket connection deferred after config update (extension mode).")
+		}
+	}
+
+	/**
+	 * Manually initiates the WebSocket connection and sets up listeners.
+	 * Intended for use when clientType is 'extension'.
+	 */
+	public connectManually() {
+		if (this.config.clientType !== "extension") {
+			console.warn("connectManually called, but clientType is not 'extension'.")
+			// Optionally connect anyway or just return
+		}
+		console.log("Manually initiating WebSocket connection...")
 		this.setupConnection()
 	}
 }

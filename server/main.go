@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,14 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
 
 	"github.com/arpinfidel/Roo-Code-Remote/server/syncmap"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
@@ -88,7 +85,6 @@ func loadConfig() Config {
 		IsDevelopment:     os.Getenv("NODE_ENV") != "production",
 		HeartbeatInterval: heartbeatInterval,
 		AllowedOrigins:    allowedOrigins,
-		AuthToken:         os.Getenv("WS_AUTH_TOKEN"),
 		ReactDevServerURL: reactDevServerURL, // Store React dev server URL
 	}
 }
@@ -113,132 +109,6 @@ func (h *Hub) run() {
 	}
 }
 
-// serveWs handles websocket requests from clients
-func serveWs(w http.ResponseWriter, r *http.Request) {
-	sessionID := ""
-	clientType := ""
-	origin := r.Header.Get("Origin")
-
-	// Verify token in production (origins are always allowed)
-	if !config.IsDevelopment {
-		// Check auth token if configured
-		if config.AuthToken != "" {
-			requestToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if requestToken != config.AuthToken {
-				log.Printf("Authentication failed from %s", origin)
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-		}
-	}
-
-	sessionID = r.URL.Query().Get("session_id")
-	if sessionID == "" {
-		log.Printf("Missing session ID from %s", r.URL.String())
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
-
-	clientType = r.URL.Query().Get("client_type")
-	if clientType == "" {
-		log.Printf("Missing client type from %s", r.URL.String())
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
-
-	if _, ok := hub.sessions.Get(sessionID); clientType == string(WebUI) && !ok {
-		log.Printf("Session doesn't exist %s", r.URL.String())
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println("Error upgrading connection:", err)
-		return
-	}
-
-	client := &Client{
-		sessionID:  sessionID,
-		conn:       conn,
-		isAlive:    true,
-		clientID:   uuid.New().String(),
-		clientType: ClientType(clientType),
-	}
-
-	sess, ok := hub.sessions.Get(sessionID)
-	if !ok {
-		sess = Session{
-			Clients: syncmap.New[*Client, struct{}](),
-		}
-	}
-	if clientType == string(Extension) {
-		sess.Host = client
-	} else {
-		clientConnected := WebSocketMessage{
-			ID:        uuid.New().String(),
-			Type:      ClientConnected,
-			Origin:    conn.RemoteAddr().String(),
-			Timestamp: time.Now().UnixMilli(),
-			ClientID:  client.clientID,
-		}
-		// Check if Host exists before sending message
-		if sess.Host != nil {
-			sess.Host.sendMessage(&clientConnected)
-		} else {
-			log.Printf("Warning: WebUI client connected to session %s but host (Extension) is not present.", sessionID)
-		}
-		sess.Clients.Set(client, struct{}{})
-	}
-
-	hub.sessions.Set(sessionID, sess)
-
-	fmt.Printf("Client connected: %s (%s)\n", client.clientType, client.sessionID)
-
-	// Start client goroutines
-	go client.writePump()
-	go client.readPump()
-}
-
-// serveApiSessions handles requests for the list of active sessions
-func serveApiSessions(w http.ResponseWriter, r *http.Request) {
-	// Set CORS header (still useful if API is called directly sometimes)
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Structure to hold session info for the API response
-	type ApiSessionInfo struct {
-		ID   string `json:"id"`
-		Name string `json:"name"` // Can add more fields like host client ID if needed
-	}
-
-	var sessionList []ApiSessionInfo
-
-	// Iterate safely through the sessions map
-	hub.sessions.Range(func(sessionID string, session Session) bool {
-		// Only list sessions that have an active host (extension)
-		if session.Host != nil {
-			sessionList = append(sessionList, ApiSessionInfo{
-				ID:   sessionID,
-				Name: fmt.Sprintf("Session %s", sessionID), // Simple name for now
-			})
-		}
-		return true // Continue iteration
-	})
-
-	// Marshal the list into JSON
-	jsonData, err := json.Marshal(sessionList)
-	if err != nil {
-		log.Printf("Error marshalling session list: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	// Write the JSON response
-	w.WriteHeader(http.StatusOK)
-	w.Write(jsonData)
-}
-
 // newReverseProxy creates a reverse proxy to the target URL
 func newReverseProxy(targetUrl string) (*httputil.ReverseProxy, error) {
 	url, err := url.Parse(targetUrl)
@@ -260,7 +130,7 @@ func newReverseProxy(targetUrl string) (*httputil.ReverseProxy, error) {
 }
 
 func initializeFirebase() error {
-	opt := option.WithCredentialsFile(os.Getenv("FIREBASE_CREDS"))
+	opt := option.WithCredentialsFile("./files/roo-code-remote-firebase-adminsdk.json")
 	app, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
 		return fmt.Errorf("error initializing Firebase app: %v", err)
@@ -272,37 +142,6 @@ func initializeFirebase() error {
 	}
 
 	return nil
-}
-
-func serveFirebaseToken(w http.ResponseWriter, r *http.Request) {
-	// Check auth token if configured
-	if config.AuthToken != "" {
-		requestToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if requestToken != config.AuthToken {
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
-			return
-		}
-	}
-
-	// Get UID from request
-	uid := r.URL.Query().Get("uid")
-	if uid == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "uid is required"})
-		return
-	}
-
-	// Generate custom token
-	token, err := firebaseAuth.CustomToken(context.Background(), uid)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
 
 func main() {
@@ -342,15 +181,15 @@ func main() {
 	mux := http.NewServeMux()
 
 	// --- Register API Handlers FIRST ---
-	mux.HandleFunc("/ws", serveWs)
-	mux.HandleFunc("/api/sessions", serveApiSessions)
-	mux.HandleFunc("/api/firebase-token", serveFirebaseToken)
+	// mux.HandleFunc("/ws", serveWs)
+	mux.HandleFunc("/ws", AuthMiddleware(serveWs))
+	mux.HandleFunc("/api/sessions", AuthMiddleware(serveApiSessions))
+	mux.HandleFunc("/api/firebase-token", AuthMiddleware(serveFirebaseToken))
 
 	// --- Handle other requests ---
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// In development, proxy to React dev server
 		if config.IsDevelopment && reactProxy != nil {
-			log.Printf("Proxying request for %s to React dev server", r.URL.Path)
 			reactProxy.ServeHTTP(w, r)
 		} else {
 			// In production (or if proxy failed), return 404 or serve static files
