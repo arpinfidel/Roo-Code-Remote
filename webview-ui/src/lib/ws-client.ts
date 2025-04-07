@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid"
+import { E2EECrypto } from "./crypto"
 
 type WsStatus = "disconnected" | "connecting" | "connected"
 
@@ -9,9 +10,12 @@ interface WsMessage {
 	payload?: unknown
 	error?: string
 	clientType?: "webui" | "extension"
+	encrypted?: boolean // Flag indicating if payload is encrypted
+	iv?: string // Initialization vector for AES-GCM
+	keyId?: string // ID of encryption key used
 }
 
-type WsEvent = "connected" | "disconnected" | "message" | "error"
+type WsEvent = "connected" | "disconnected" | "message" | "error" | "paired"
 
 export class WsClient {
 	private clientType: "webui" | "extension" = "webui"
@@ -23,6 +27,66 @@ export class WsClient {
 	private sessionId: string | null = null
 	private authToken: string | null = null
 	private connectingPromise: Promise<void> | null = null
+	private crypto = new E2EECrypto()
+	private isPaired = false
+	private sharedKey?: JsonWebKey
+	private pairingCode?: string
+	private keyPair?: { publicKey: JsonWebKey, privateKey: JsonWebKey, keyId: string }
+
+	async startPairingFlow(): Promise<void> {
+		// Generate and display pairing code
+		this.pairingCode = await this.crypto.generatePairingCode()
+		
+		// Send pairing request to extension via message passing
+		window.postMessage({
+			type: 'pairing-start',
+			code: this.pairingCode
+		}, '*')
+
+		// Generate key pair for this session
+		this.keyPair = await this.crypto.generateKeyPair()
+	}
+
+	async completePairingWithCode(enteredCode: string): Promise<void> {
+		// Verify code matches
+		if (enteredCode !== this.pairingCode) {
+			throw new Error('Invalid pairing code')
+		}
+
+		if (!this.keyPair) {
+			throw new Error('Key pair not generated')
+		}
+
+		// Exchange public keys with extension
+		window.postMessage({
+			type: 'pairing-exchange',
+			publicKey: this.keyPair.publicKey
+		}, '*')
+	}
+
+	async handleExtensionResponse(message: any) {
+		if (message.type === 'pairing-exchange-response' && this.keyPair) {
+			// Derive shared key from extension's public key
+			this.sharedKey = (await this.crypto.deriveSharedKey(
+				message.publicKey,
+				this.keyPair,
+				message.keyId
+			)).key
+			
+			this.isPaired = true
+			this.emit("paired")
+		}
+	}
+
+	private async encryptMessage(message: WsMessage): Promise<WsMessage> {
+		if (!this.isPaired || !this.sharedKey) return message
+		return this.crypto.encryptMessage(message, this.sharedKey)
+	}
+
+	private async decryptMessage(message: WsMessage): Promise<WsMessage> {
+		if (!message.encrypted || !this.sharedKey) return message
+		return this.crypto.decryptMessage(message, this.sharedKey)
+	}
 
 	setURL(url: string) {
 		this.url = new URL(url)
@@ -103,12 +167,23 @@ export class WsClient {
 				resolve()
 			}
 
-			this.socket.onmessage = (event) => {
+			this.socket.onmessage = async (event) => {
 				try {
-					const message = JSON.parse(event.data.toString()) as WsMessage
+					let message = JSON.parse(event.data.toString()) as WsMessage
+
+					// Handle pairing messages through extension response handler
+					if (message.type === "pairing-exchange-response") {
+						await this.handleExtensionResponse(message)
+						return
+					}
+
+					// Decrypt message if needed
+					message = await this.decryptMessage(message)
+
 					if (message.type !== "vscode-event") {
 						return
 					}
+
 					const ev = new MessageEvent("message", {
 						data: message.payload,
 					})
@@ -139,20 +214,22 @@ export class WsClient {
 		return this.connectingPromise
 	}
 
-	send(message: Omit<WsMessage, "id">): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const messageWithId = {
-				...message,
-				id: uuidv4(),
-			}
-
-			if (this.status !== "connected") {
-				this.queue.push(messageWithId)
-				return
-			}
-
+	async send(message: Omit<WsMessage, "id">): Promise<void> {
+		return new Promise(async (resolve, reject) => {
 			try {
-				this.socket?.send(JSON.stringify(messageWithId))
+				const messageWithId = {
+					...message,
+					id: uuidv4(),
+				}
+
+				if (this.status !== "connected") {
+					this.queue.push(messageWithId)
+					return
+				}
+
+				// Encrypt message if paired
+				const finalMessage = await this.encryptMessage(messageWithId)
+				this.socket?.send(JSON.stringify(finalMessage))
 				resolve()
 			} catch (err) {
 				reject(err)

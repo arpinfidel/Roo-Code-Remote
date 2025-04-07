@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid"
 import * as vscode from "vscode"
 
 import { WebSocketConfig, WebSocketMessage } from "./types"
+import { E2EECrypto } from "./crypto"
 
 type MessageHandler = (message: WebSocketMessage) => void
 type ErrorHandler = (error: Error) => void

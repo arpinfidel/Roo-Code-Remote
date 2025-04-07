@@ -46,6 +46,9 @@ type WebSocketMessage struct {
 	ClientID   string      `json:"clientId,omitempty"`
 	Timestamp  int64       `json:"timestamp,omitempty"`
 	Origin     string      `json:"origin,omitempty"`
+	Encrypted  bool        `json:"encrypted,omitempty"` // Flag indicating if payload is encrypted
+	IV         string      `json:"iv,omitempty"`        // Initialization vector for AES-GCM
+	KeyID      string      `json:"keyId,omitempty"`     // ID of encryption key used
 }
 
 // ClientIdentifyMessage represents a client identification message

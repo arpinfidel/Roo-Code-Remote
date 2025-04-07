@@ -19,6 +19,9 @@ export type WebSocketMessageType =
 	| "vscode-message"
 	| "vscode-event"
 	| "client-connected"
+	| "pairing-request"
+	| "pairing-response"
+	| "pairing-complete"
 
 export interface WebSocketMessage {
 	id?: string // Make id optional for outgoing messages
@@ -30,6 +33,9 @@ export interface WebSocketMessage {
 	data?: any
 	error?: string
 	clientType?: "webui" | "extension"
+	encrypted?: boolean // Flag indicating if payload is encrypted
+	iv?: string // Initialization vector for AES-GCM
+	keyId?: string // ID of encryption key used
 }
 
 export interface RooCodeSettings {
