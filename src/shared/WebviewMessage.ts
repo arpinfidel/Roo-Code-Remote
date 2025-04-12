@@ -127,6 +127,7 @@ export interface WebviewMessage {
 		| "requestLogin"
 		| "firebaseIdToken"
 		| "connectWebSocket" // Add type for manual connection trigger
+		| "websocketState" // Add type for WebSocket state updates
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse
@@ -152,6 +153,7 @@ export interface WebviewMessage {
 	source?: "global" | "project"
 	requestId?: string
 	ids?: string[]
+	websocketState?: string // Add property for WebSocket state
 }
 
 export const checkoutDiffPayloadSchema = z.object({

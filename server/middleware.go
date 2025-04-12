@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -36,9 +35,8 @@ func GetAuthToken(r *http.Request) string {
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authToken := GetAuthToken(r)
-		fmt.Printf("blabla")
 		if authToken == "" {
-			fmt.Printf("Missing authorization token")
+			log.Printf("Missing authorization token")
 			http.Error(w, "Authorization header is required", http.StatusUnauthorized)
 			return
 		}
@@ -46,6 +44,7 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Check if the header has the correct format
 		parts := strings.Split(authToken, " ")
 		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			log.Printf("Invalid authorization header format: %s", authToken)
 			http.Error(w, "Authorization header format must be 'Bearer {token}'", http.StatusUnauthorized)
 			return
 		}

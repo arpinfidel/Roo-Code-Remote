@@ -19,6 +19,7 @@ export type WebSocketMessageType =
 	| "vscode-message"
 	| "vscode-event"
 	| "client-connected"
+	| "e2ee" // Add type for E2EE signaling messages
 
 export interface WebSocketMessage {
 	id?: string // Make id optional for outgoing messages

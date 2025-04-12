@@ -23,6 +23,7 @@ export class WsClient {
 	private sessionId: string | null = null
 	private authToken: string | null = null
 	private connectingPromise: Promise<void> | null = null
+	private handleMessagesExternally = false; // Flag for wrappers
 
 	setURL(url: string) {
 		this.url = new URL(url)
@@ -65,7 +66,7 @@ export class WsClient {
 			this.url.searchParams.set("client_type", this.clientType)
 		}
 		if (this.authToken) {
-			this.url.searchParams.set("auth_token", this.authToken)
+			this.url.searchParams.set("auth_token", "Bearer " + this.authToken)
 		}
 		this.connectingPromise = new Promise((resolve, reject) => {
 			if (this.status === "connected") {
@@ -104,15 +105,25 @@ export class WsClient {
 			}
 
 			this.socket.onmessage = (event) => {
+				// Allow external handling if flag is set
+				if (this.handleMessagesExternally) {
+					// Optionally, could emit a 'raw_message' event here for the wrapper
+					// this.emit('raw_message', event.data);
+					return; // Stop default processing
+				}
+				// Default message handling
 				try {
 					const message = JSON.parse(event.data.toString()) as WsMessage
-					if (message.type !== "vscode-event") {
-						return
+					// Emit the parsed message for potential listeners (like the wrapper)
+					this.emit("message", message);
+
+					// Original logic to dispatch vscode-event to window
+					if (message.type === "vscode-event") {
+						const ev = new MessageEvent("message", {
+							data: message.payload,
+						})
+						window.dispatchEvent(ev)
 					}
-					const ev = new MessageEvent("message", {
-						data: message.payload,
-					})
-					window.dispatchEvent(ev)
 				} catch (err) {
 					this.emit("error", new Error("Failed to parse message"))
 				}
@@ -180,5 +191,15 @@ export class WsClient {
 
 	getStatus(): WsStatus {
 		return this.status
+	}
+
+	/** Allows access to the underlying socket for advanced handling (e.g., wrappers) */
+	getRawSocket(): WebSocket | null {
+		return this.socket;
+	}
+
+	/** Instructs the client to skip its default onmessage handling */
+	public setExternalMessageHandler() {
+		this.handleMessagesExternally = true;
 	}
 }

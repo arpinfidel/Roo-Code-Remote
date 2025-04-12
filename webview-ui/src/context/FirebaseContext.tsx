@@ -111,7 +111,8 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 				authChecked,
 			})
 		}
-	}, [user, isAuthenticated, authChecked, firebase])
+	// Remove 'firebase' from dependency array to break the loop
+	}, [user, isAuthenticated, authChecked])
 
 	if (!firebase) {
 		return null // Or loading indicator

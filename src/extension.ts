@@ -103,7 +103,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			maxRetries: config.get("websocket.maxRetries", 5),
 			sessionId: sessionId,
 			clientType: "extension",
-		})
+		}, context) // Pass the extension context
 
 		// Set the adapter instance on the provider
 		provider.setWebSocketAdapter(webSocketAdapter)
