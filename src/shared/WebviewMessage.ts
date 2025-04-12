@@ -127,6 +127,15 @@ export interface WebviewMessage {
 		| "requestLogin"
 		| "firebaseIdToken"
 		| "connectWebSocket" // Add type for manual connection trigger
+		| "encryptionStatus" // Add type for encryption status
+		// E2EE message types
+		| "initiatePairing"
+		| "requestPublicKey"
+		| "pairingComplete"
+		| "resetPairing"
+		| "pairingCode"
+		| "publicKey"
+		| "pairingReset"
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse
@@ -152,6 +161,10 @@ export interface WebviewMessage {
 	source?: "global" | "project"
 	requestId?: string
 	ids?: string[]
+	// E2EE properties
+	pairingCode?: string
+	deviceId?: string
+	publicKey?: string
 }
 
 export const checkoutDiffPayloadSchema = z.object({
@@ -171,4 +184,13 @@ export const checkoutRestorePayloadSchema = z.object({
 
 export type CheckpointRestorePayload = z.infer<typeof checkoutRestorePayloadSchema>
 
-export type WebViewMessagePayload = CheckpointDiffPayload | CheckpointRestorePayload
+/**
+ * Payload for encryption-related messages
+ */
+export interface EncryptionPayload {
+  deviceId?: string
+  pairingCode?: string
+  publicKey?: string
+}
+
+export type WebViewMessagePayload = CheckpointDiffPayload | CheckpointRestorePayload | EncryptionPayload

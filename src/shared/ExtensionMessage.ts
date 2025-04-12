@@ -73,6 +73,11 @@ export interface ExtensionMessage {
 		| "toggleApiConfigPin"
 		| "setToken"
 		| "websocketState"
+		// E2EE message types
+		| "pairingCode"
+		| "encryptionStatus"
+		| "publicKey"
+		| "pairingReset"
 	text?: string
 	action?:
 		| "chatButtonClicked"
@@ -120,6 +125,9 @@ export interface ExtensionMessage {
 	}>
 	error?: string
 	credential?: string
+	publicKey?: string
+	bool?: boolean
+	pairingCode?: string
 }
 
 export type ExtensionState = Pick<

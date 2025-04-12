@@ -6,15 +6,24 @@ import { WebviewMessage } from "../../shared/WebviewMessage"
 import * as vscode from "vscode"
 import { WebSocketConfig, WebSocketMessage } from "./types"
 import { ExtensionMessage } from "../../shared/ExtensionMessage"
+import { EncryptedWebSocketClient } from "../encryption/EncryptedWebSocketClient"
+import { EncryptionService } from "../encryption/EncryptionService"
+import { PairingManager } from "../encryption/PairingManager"
 
 export class WebSocketApiAdapter {
-	private wsClient: WebSocketClient
-	private api: API
-	private config: WebSocketConfig // Store config
+	private wsClient: WebSocketClient | EncryptedWebSocketClient;
+	private api: API;
+	private config: WebSocketConfig; // Store config
+	private encryptionService: EncryptionService | null = null;
+	private pairingManager: PairingManager | null = null;
 
 	constructor(api: API, config: WebSocketConfig) {
-		this.api = api
-		this.config = config // Store config
+		this.api = api;
+		this.config = config; // Store config
+		
+		// We'll initialize the encryption service and pairing manager later
+		// when we update the ClineProvider class
+		
 		const wsClient = new WebSocketClient({
 			serverUrl: config.serverUrl || "",
 			provider: config.provider, // Pass provider instead of authToken
@@ -22,28 +31,28 @@ export class WebSocketApiAdapter {
 			maxRetries: config.maxRetries || 5,
 			clientType: "extension",
 			sessionId: config.sessionId,
-		})
-		this.wsClient = wsClient
+		});
+		this.wsClient = wsClient;
 
 		// Setup state change listeners
 		this.wsClient.on("connecting", () => {
-			this.api.getProvider()?.notifyWebSocketStateChange("connecting")
-		})
+			this.api.getProvider()?.notifyWebSocketStateChange("connecting");
+		});
 		this.wsClient.on("connected", () => {
-			this.api.getProvider()?.notifyWebSocketStateChange("connected")
-		})
+			this.api.getProvider()?.notifyWebSocketStateChange("connected");
+		});
 		this.wsClient.on("disconnected", () => {
-			this.api.getProvider()?.notifyWebSocketStateChange("disconnected")
-		})
+			this.api.getProvider()?.notifyWebSocketStateChange("disconnected");
+		});
 		this.wsClient.on("error", () => {
-			this.api.getProvider()?.notifyWebSocketStateChange("error")
-		})
+			this.api.getProvider()?.notifyWebSocketStateChange("error");
+		});
 
 		// Only connect automatically if clientType is 'webui'
 		if (this.config.clientType === "webui") {
-			this.setupConnection()
+			this.setupConnection();
 		} else {
-			console.log("WebSocket connection deferred for manual initiation (extension mode).")
+			console.log("WebSocket connection deferred for manual initiation (extension mode).");
 		}
 	}
 
@@ -51,14 +60,14 @@ export class WebSocketApiAdapter {
 		this.wsClient
 			.connect()
 			.then(() => {
-				vscode.window.showInformationMessage(`WebSocket connection successful`)
+				vscode.window.showInformationMessage(`WebSocket connection successful`);
 			})
 			.catch((err) => {
-				vscode.window.showErrorMessage(`WebSocket connection unsuccessful: ${err.message} ${err}`)
-			})
+				vscode.window.showErrorMessage(`WebSocket connection unsuccessful: ${err.message} ${err}`);
+			});
 
 		this.wsClient.on("message", (message: WebSocketMessage) => {
-			console.log("ws-client: received message", message)
+			console.log("ws-client: received message", message);
 			switch (message.type) {
 				case "vscode-message":
 					this.webviewCommand(message)
@@ -68,7 +77,7 @@ export class WebSocketApiAdapter {
 								type: "response",
 								status: "completed",
 								payload: result,
-							} as WebSocketMessage)
+							} as WebSocketMessage);
 						})
 						.catch((error) => {
 							this.wsClient.send({
@@ -76,21 +85,21 @@ export class WebSocketApiAdapter {
 								type: "response",
 								status: "error",
 								error: error.message,
-							} as WebSocketMessage)
-						})
-					break
+							} as WebSocketMessage);
+						});
+					break;
 				case "client-connected":
-					const provider = this.api.getProvider()
-					provider.getStateToPostToWebview().then((state) => {
-						provider.emit("messageToWebview", { type: "state", state })
-					})
-					break
+					const provider = this.api.getProvider();
+					provider?.getStateToPostToWebview().then((state) => {
+						provider.emit("messageToWebview", { type: "state", state });
+					});
+					break;
 			}
-		})
+		});
 
 		this.wsClient.on("error", (err) => {
-			vscode.window.showErrorMessage(`WebSocket connection error: ${err.message} ${err}`)
-		})
+			vscode.window.showErrorMessage(`WebSocket connection error: ${err.message} ${err}`);
+		});
 	}
 
 	public forwardMessageEvent(event: ExtensionMessage) {
@@ -98,13 +107,13 @@ export class WebSocketApiAdapter {
 			type: "vscode-event",
 			id: uuidv4(),
 			payload: event,
-		} as WebSocketMessage)
+		} as WebSocketMessage);
 	}
 
 	private async webviewCommand(message: WebSocketMessage): Promise<any> {
-		const provider = this.api.getProvider()
+		const provider = this.api.getProvider();
 		if (!provider) {
-			return { status: "no_provider" }
+			return { status: "no_provider" };
 		}
 
 		try {
@@ -113,22 +122,22 @@ export class WebSocketApiAdapter {
 				text: message.payload?.text,
 				images: message.payload?.images,
 				...message.payload,
-			}
+			};
 
-			await webviewMessageHandler(provider, webviewMsg)
-			return { status: "processed" }
+			await webviewMessageHandler(provider, webviewMsg);
+			return { status: "processed" };
 		} catch (err) {
-			console.error("Error forwarding WebSocket message:", err)
+			console.error("Error forwarding WebSocket message:", err);
 			return {
 				status: "error",
 				error: err instanceof Error ? err.message : String(err),
-			}
+			};
 		}
 	}
 
 	public updateConfig(config: WebSocketConfig) {
-		this.config = config // Update stored config
-		this.wsClient.disconnect()
+		this.config = config; // Update stored config
+		this.wsClient.disconnect();
 		this.wsClient = new WebSocketClient({
 			serverUrl: config.serverUrl || "",
 			provider: config.provider, // Pass provider instead of authToken
@@ -136,12 +145,12 @@ export class WebSocketApiAdapter {
 			maxRetries: config.maxRetries || 5,
 			clientType: "extension",
 			sessionId: config.sessionId,
-		})
+		});
 		// Only reconnect automatically if clientType is 'webui'
 		if (this.config.clientType === "webui") {
-			this.setupConnection()
+			this.setupConnection();
 		} else {
-			console.log("WebSocket connection deferred after config update (extension mode).")
+			console.log("WebSocket connection deferred after config update (extension mode).");
 		}
 	}
 
@@ -151,10 +160,48 @@ export class WebSocketApiAdapter {
 	 */
 	public connectManually() {
 		if (this.config.clientType !== "extension") {
-			console.warn("connectManually called, but clientType is not 'extension'.")
+			console.warn("connectManually called, but clientType is not 'extension'.");
 			// Optionally connect anyway or just return
 		}
-		console.log("Manually initiating WebSocket connection...")
-		this.setupConnection()
+		console.log("Manually initiating WebSocket connection...");
+		this.setupConnection();
+	}
+	
+	/**
+	 * Set the encryption service
+	 * @param encryptionService The encryption service
+	 */
+	public setEncryptionService(encryptionService: EncryptionService) {
+		this.encryptionService = encryptionService;
+	}
+	
+	/**
+	 * Set the pairing manager
+	 * @param pairingManager The pairing manager
+	 */
+	public setPairingManager(pairingManager: PairingManager) {
+		this.pairingManager = pairingManager;
+	}
+	
+	/**
+	 * Enable encryption for the WebSocket client
+	 */
+	public enableEncryption() {
+		if (!this.encryptionService) {
+			console.warn("Cannot enable encryption: encryption service not set");
+			return;
+		}
+		
+		// Create an encrypted client wrapper
+		const encryptedClient = new EncryptedWebSocketClient(this.config, this.encryptionService);
+		
+		// Replace the existing client
+		this.wsClient.disconnect();
+		this.wsClient = encryptedClient;
+		
+		// Set up the connection
+		if (this.config.clientType === "webui") {
+			this.setupConnection();
+		}
 	}
 }

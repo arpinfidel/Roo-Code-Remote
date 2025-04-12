@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { PlusIcon, HistoryIcon, SettingsIcon } from "../icons"
 import { vscode } from "../../utils/vscode"
 import { useFirebase } from "../../context/FirebaseContext"
+import { EncryptionStatus } from "../encryption/EncryptionStatus"
 
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 
@@ -54,6 +55,9 @@ export const NavigationBar = ({ activeTab, onTabChange, user, webSocketState }: 
 			<div className="flex space-x-2 items-center">
 				{" "}
 				{/* Added items-center */}
+				{/* Encryption Status */}
+				{!isStandalone && <EncryptionStatus />}
+				
 				{/* Connect Button (Only in Extension) */}
 				{!isStandalone && (
 					<button

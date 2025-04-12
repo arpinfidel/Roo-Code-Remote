@@ -54,6 +54,9 @@ import { getWorkspacePath } from "../../utils/path"
 import { webviewMessageHandler } from "./webviewMessageHandler"
 import { WebviewMessage } from "../../shared/WebviewMessage"
 import { WebSocketApiAdapter } from "../../services/websocket/api-adapter" // Import WebSocketApiAdapter
+import { EncryptionService } from "../../services/encryption/EncryptionService" // Import EncryptionService
+import { PairingManager } from "../../services/encryption/PairingManager" // Import PairingManager
+import { PairingStorage } from "../../services/encryption/PairingStorage" // Import PairingStorage
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -93,6 +96,8 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	public readonly customModesManager: CustomModesManager
 	private firebaseIdToken: string | null = null // Add property to store Firebase ID token
 	public webSocketAdapter?: WebSocketApiAdapter // Add property to hold the adapter instance
+	private encryptionService!: EncryptionService // Add property for encryption service
+	private pairingManager!: PairingManager // Add property for pairing manager
 
 	constructor(
 		readonly context: vscode.ExtensionContext,
@@ -105,6 +110,9 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 		this.outputChannel.appendLine("ClineProvider instantiated")
 		this.contextProxy = new ContextProxy(context)
 		ClineProvider.activeInstances.add(this)
+		
+		// Initialize encryption service and pairing manager
+		this.initializeEncryption()
 
 		// Register this provider with the telemetry service to enable it to add
 		// properties like mode and provider.
@@ -989,6 +997,51 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 		await this.upsertApiConfiguration(currentApiConfigName, newConfiguration)
 	}
 
+	/**
+	 * Initialize the encryption service and pairing manager
+	 */
+	private initializeEncryption(): void {
+		// Create the encryption service
+		this.encryptionService = new EncryptionService();
+		
+		// Create the pairing storage
+		const pairingStorage = new PairingStorage(this.context);
+		
+		// Create the pairing manager
+		this.pairingManager = new PairingManager(this.encryptionService, pairingStorage);
+	}
+	
+	/**
+	 * Get the encryption service
+	 * @returns The encryption service
+	 */
+	public getEncryptionService(): EncryptionService {
+		return this.encryptionService;
+	}
+	
+	/**
+	 * Get the pairing manager
+	 * @returns The pairing manager
+	 */
+	public getPairingManager(): PairingManager {
+		return this.pairingManager;
+	}
+	
+	/**
+	 * Notify the webview about the encryption status
+	 */
+	public notifyEncryptionStatus(): void {
+		const pairedDevices = this.pairingManager.getPairedDevices();
+		const isPaired = Object.keys(pairedDevices).length > 0;
+		
+		this.postMessageToWebview({
+			type: "encryptionStatus",
+			bool: isPaired,
+			values: {
+				pairedDevices: pairedDevices
+			}
+		});
+	}
 	// Requesty
 
 	async handleRequestyCallback(code: string) {
@@ -1503,6 +1556,23 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	// Method to set the Firebase ID token
 	public setFirebaseIdToken(token: string | null) {
 		this.firebaseIdToken = token
+		
+		// If we have a WebSocketAdapter, update it with encryption
+		if (this.webSocketAdapter && token) {
+			// Set the encryption service and pairing manager
+			this.webSocketAdapter.setEncryptionService(this.encryptionService)
+			this.webSocketAdapter.setPairingManager(this.pairingManager)
+			
+			// Check if we have any paired devices
+			const pairedDevices = this.pairingManager.getPairedDevices()
+			if (Object.keys(pairedDevices).length > 0) {
+				// Enable encryption for the WebSocketAdapter
+				this.webSocketAdapter.enableEncryption()
+				
+				// Notify the webview about the encryption status
+				this.notifyEncryptionStatus()
+			}
+		}
 		this.log(`Firebase ID token ${token ? "received" : "cleared"}`)
 		// Potentially trigger WebSocket reconnection or update here if needed immediately
 	}

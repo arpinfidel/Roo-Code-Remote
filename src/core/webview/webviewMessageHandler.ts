@@ -59,6 +59,149 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				vscode.window.showErrorMessage("Cannot connect WebSocket: Adapter not initialized.")
 			}
 			break
+			
+		// E2EE message handling
+		case "initiatePairing":
+			try {
+				const pairingManager = provider.getPairingManager()
+				const pairingCode = pairingManager.initiatePairing()
+				
+				// Send the pairing code back to the webview
+				vscode.window.showInformationMessage(
+					`Enter this pairing code in the Roo Code panel: ${pairingCode}`,
+					{ modal: true } // Make it modal so it stays until dismissed
+				)
+			} catch (error) {
+				console.error("Error initiating pairing:", error)
+				vscode.window.showErrorMessage("Failed to initiate pairing")
+			}
+			break
+			
+		case "requestPublicKey":
+			try {
+				const pairingManager = provider.getPairingManager()
+				const encryptionService = provider.getEncryptionService()
+				
+				// Cast payload to EncryptionPayload
+				const encryptionPayload = message.payload as import("../../shared/WebviewMessage").EncryptionPayload
+				
+				// Extract parameters from payload
+				const pairingCode = encryptionPayload?.pairingCode
+				const deviceId = encryptionPayload?.deviceId
+				const publicKeyFromClient = encryptionPayload?.publicKey
+				
+				// Verify the pairing code
+				if (!pairingCode || !encryptionService.verifyPairingCode(pairingCode)) {
+					provider.postMessageToWebview({
+						type: "pairingReset",
+						text: "Invalid pairing code"
+					})
+					break
+				}
+				
+				// Get the public key
+				const publicKey = encryptionService.getPublicKey()
+				
+				// Send the public key back to the client via WebSocket
+				provider.webSocketAdapter?.forwardMessageEvent({
+					type: "publicKey",
+					publicKey,
+					pairingCode
+				})
+			} catch (error) {
+				console.error("Error handling public key request:", error)
+				vscode.window.showErrorMessage("Failed to process public key request")
+			}
+			break
+			
+		case "pairingComplete":
+			try {
+				const pairingManager = provider.getPairingManager()
+				const encryptionService = provider.getEncryptionService() // Get encryption service
+				
+				// Cast payload to EncryptionPayload
+				const encryptionPayload = message.payload as import("../../shared/WebviewMessage").EncryptionPayload
+				
+				// Extract parameters from payload
+				const deviceId = encryptionPayload?.deviceId
+				const clientPublicKeyPem = encryptionPayload?.publicKey // Client's public key
+				
+				if (!deviceId || !clientPublicKeyPem) {
+					console.error("Missing deviceId or clientPublicKey in pairingComplete message")
+					break
+				}
+
+				// Pairing is confirmed by the client.
+				// Update the stored pairing data with the client's public key.
+				const existingPairingData = pairingManager.isDevicePaired(deviceId) ? pairingManager.getPairedDevices()[deviceId] : null;
+				
+				if (existingPairingData) {
+					const updatedPairingData = {
+						...existingPairingData,
+						publicKey: clientPublicKeyPem, // Store client's key
+						timestamp: Date.now() // Update timestamp
+					};
+					await pairingManager.storage.savePairingData(deviceId, updatedPairingData);
+					
+					// Ensure the shared key is derived (it should be from step 6, but double-check)
+					if (encryptionService.getPairingStatus() !== 'paired') {
+						// This shouldn't happen if step 6 worked, but handle defensively
+						console.warn("Pairing complete message received, but shared key not derived. Attempting derivation.");
+						await pairingManager.connectWithDevice(deviceId);
+					}
+
+					// Enable encryption if the WebSocket adapter exists
+					if (provider.webSocketAdapter && encryptionService.getPairingStatus() === 'paired') {
+						provider.webSocketAdapter.setEncryptionService(encryptionService)
+						provider.webSocketAdapter.setPairingManager(pairingManager)
+						provider.webSocketAdapter.enableEncryption()
+						
+						// Notify the webview about the encryption status
+						provider.notifyEncryptionStatus()
+						console.log(`E2EE pairing finalized and encryption enabled for device: ${deviceId}`);
+					} else {
+						console.error(`Failed to enable encryption for device ${deviceId}. Adapter exists: ${!!provider.webSocketAdapter}, Pairing status: ${encryptionService.getPairingStatus()}`);
+					}
+				} else {
+					console.error(`Received pairingComplete for unknown deviceId: ${deviceId}`);
+					// Optionally send a reset message back?
+				}
+			} catch (error) {
+				console.error("Error completing pairing:", error)
+				vscode.window.showErrorMessage("Failed to complete pairing")
+			}
+			break
+			
+		case "resetPairing":
+			try {
+				const pairingManager = provider.getPairingManager()
+				
+				// Cast payload to EncryptionPayload
+				const encryptionPayload = message.payload as import("../../shared/WebviewMessage").EncryptionPayload
+				
+				// Extract parameters from payload
+				const deviceId = encryptionPayload?.deviceId
+				
+				if (deviceId) {
+					// Remove the specific device
+					await pairingManager.removePairedDevice(deviceId)
+				} else {
+					// Reset all pairings
+					await pairingManager.resetAllPairings()
+				}
+				
+				// Notify the webview
+				provider.postMessageToWebview({
+					type: "pairingReset"
+				})
+				
+				// Notify the webview about the encryption status
+				provider.notifyEncryptionStatus()
+			} catch (error) {
+				console.error("Error resetting pairing:", error)
+				vscode.window.showErrorMessage("Failed to reset pairing")
+			}
+			break
 
 		// Existing cases below...
 		case "webviewDidLaunch":

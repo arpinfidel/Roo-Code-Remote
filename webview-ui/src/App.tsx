@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { User } from "firebase/auth"
 import { FirebaseProvider, useFirebase } from "./context/FirebaseContext"
+import { EncryptionProvider } from "./context/encryption-context"
 import { useAuthToken } from "./components/ui/hooks/useAuthToken"
 
 import { useEvent } from "react-use"
@@ -289,7 +290,9 @@ const AppWithProviders = () => {
 					<QueryClientProvider client={queryClient}>
 						<WsProvider>
 							<FirebaseProvider>
-								<App />
+								<EncryptionProvider>
+									<App />
+								</EncryptionProvider>
 							</FirebaseProvider>
 						</WsProvider>
 					</QueryClientProvider>
