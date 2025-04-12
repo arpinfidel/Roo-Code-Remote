@@ -36,9 +36,8 @@ func GetAuthToken(r *http.Request) string {
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authToken := GetAuthToken(r)
-		fmt.Printf("blabla")
 		if authToken == "" {
-			fmt.Printf("Missing authorization token")
+			fmt.Printf("Missing authorization token\n")
 			http.Error(w, "Authorization header is required", http.StatusUnauthorized)
 			return
 		}

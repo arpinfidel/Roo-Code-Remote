@@ -11,18 +11,24 @@ export class WebSocketApiAdapter {
 	private wsClient: WebSocketClient
 	private api: API
 	private config: WebSocketConfig // Store config
+	private context: vscode.ExtensionContext // Store context
 
-	constructor(api: API, config: WebSocketConfig) {
+	constructor(api: API, config: WebSocketConfig, context: vscode.ExtensionContext) { // Added context
 		this.api = api
 		this.config = config // Store config
-		const wsClient = new WebSocketClient({
-			serverUrl: config.serverUrl || "",
-			provider: config.provider, // Pass provider instead of authToken
-			reconnectInterval: config.reconnectInterval || 5000,
-			maxRetries: config.maxRetries || 5,
-			clientType: "extension",
-			sessionId: config.sessionId,
-		})
+		this.context = context // Store context
+		// Pass context to WebSocketClient constructor
+		const wsClient = new WebSocketClient(
+			{
+				serverUrl: config.serverUrl || "",
+				provider: config.provider, // Pass provider instead of authToken
+				reconnectInterval: config.reconnectInterval || 5000,
+				maxRetries: config.maxRetries || 5,
+				clientType: "extension",
+				sessionId: config.sessionId,
+			},
+			context, // Pass context here
+		)
 		this.wsClient = wsClient
 
 		// Setup state change listeners
@@ -129,14 +135,18 @@ export class WebSocketApiAdapter {
 	public updateConfig(config: WebSocketConfig) {
 		this.config = config // Update stored config
 		this.wsClient.disconnect()
-		this.wsClient = new WebSocketClient({
-			serverUrl: config.serverUrl || "",
-			provider: config.provider, // Pass provider instead of authToken
-			reconnectInterval: config.reconnectInterval || 5000,
-			maxRetries: config.maxRetries || 5,
-			clientType: "extension",
-			sessionId: config.sessionId,
-		})
+		// Pass context when re-creating client on config update
+		this.wsClient = new WebSocketClient(
+			{
+				serverUrl: config.serverUrl || "",
+				provider: config.provider, // Pass provider instead of authToken
+				reconnectInterval: config.reconnectInterval || 5000,
+				maxRetries: config.maxRetries || 5,
+				clientType: "extension",
+				sessionId: config.sessionId,
+			},
+			this.context, // Pass stored context
+		)
 		// Only reconnect automatically if clientType is 'webui'
 		if (this.config.clientType === "webui") {
 			this.setupConnection()
@@ -156,5 +166,23 @@ export class WebSocketApiAdapter {
 		}
 		console.log("Manually initiating WebSocket connection...")
 		this.setupConnection()
+	}
+
+	/**
+		* Initiates the E2EE pairing process.
+		*/
+	public async initiatePairing(): Promise<void> {
+		if (!this.wsClient) {
+			console.error("WebSocket client not initialized. Cannot initiate pairing.")
+			vscode.window.showErrorMessage("Cannot start pairing: WebSocket connection not ready.")
+			return
+		}
+		try {
+			await this.wsClient.initiatePairing()
+		} catch (err) {
+			console.error("Error initiating pairing via adapter:", err)
+			// Error is likely already shown by the client, but maybe add a generic one here?
+			// vscode.window.showErrorMessage(`Failed to initiate pairing: ${err instanceof Error ? err.message : err}`);
+		}
 	}
 }

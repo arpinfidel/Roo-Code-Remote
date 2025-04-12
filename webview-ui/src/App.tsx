@@ -24,12 +24,13 @@ import { vscode } from "./utils/vscode"
 import { useWs, WsProvider } from "./context/ws-context"
 import { telemetryClient } from "./utils/TelemetryClient"
 import { ExtensionStateContextProvider, useExtensionState } from "./context/ExtensionStateContext"
-import {
-	initializeSodium,
-	generateKeyPair,
-	calculateVerificationValue,
-	calculateClientSharedSecret, // Needed for session key
-} from "./lib/cryptoUtils" // E2EE Crypto Utils
+// Remove old crypto utils import
+// import {
+// 	initializeSodium,
+// 	generateKeyPair,
+// 	calculateVerificationValue,
+// 	calculateClientSharedSecret, // Needed for session key
+// } from "./lib/cryptoUtils" // E2EE Crypto Utils
 import ChatView from "./components/chat/ChatView"
 import HistoryView from "./components/history/HistoryView"
 import SettingsView, { SettingsViewRef } from "./components/settings/SettingsView"
@@ -79,12 +80,12 @@ const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]
 	plusButtonClicked: "chat",
 }
 
-type PairingStatus = "unpaired" | "pairing" | "awaitingCode" | "verifying" | "paired" | "error"
-type KeyPairState = { publicKey: string | null; privateKey: string | null }
+// Use PairingState from WsClient (implicitly via event)
+type PairingState = "unpaired" | "pairing" | "paired" | "error"
 
-// Local storage keys
-const WEBVIEW_PRIVATE_KEY_LS = "cline.e2ee.webviewPrivateKey"
-const EXTENSION_PUBLIC_KEY_LS = "cline.e2ee.extensionPublicKey"
+// Remove old local storage keys constants
+// const WEBVIEW_PRIVATE_KEY_LS = "cline.e2ee.webviewPrivateKey"
+// const EXTENSION_PUBLIC_KEY_LS = "cline.e2ee.extensionPublicKey"
 
 const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	// --- State ---
@@ -110,15 +111,16 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	const { token, getAuthHeaders } = useAuthToken()
 	const [searchParams] = useSearchParams()
 
-	// --- E2EE State ---
-	const [pairingStatus, setPairingStatus] = useState<PairingStatus>("unpaired")
-	const [webviewKeys, setWebviewKeys] = useState<KeyPairState>({ publicKey: null, privateKey: null })
-	const [extensionPublicKey, setExtensionPublicKey] = useState<string | null>(null)
+	// --- E2EE State (New) ---
+	const [pairingState, setPairingState] = useState<PairingState>("unpaired") // Local state reflecting WsClient
 	const [pairingCodeInput, setPairingCodeInput] = useState("")
-	const [challengeVerificationValue, setChallengeVerificationValue] = useState<string | null>(null)
 	const [pairingError, setPairingError] = useState<string | null>(null)
-	const [isSodiumReady, setIsSodiumReady] = useState(false)
-	const [sessionSharedSecret, setSessionSharedSecret] = useState<string | null>(null) // E2EE Session Key
+	// isSodiumReady might still be useful if crypto ops are needed directly in UI, but WsClient handles most now.
+	// const [isSodiumReady, setIsSodiumReady] = useState(false)
+	// Remove old state: webviewKeys, extensionPublicKey, challengeVerificationValue, sessionSharedSecret
+	const [isInitiatingPairing, setIsInitiatingPairing] = useState(false) // State for button disable
+	// Removed duplicate state declaration
+
 	// --- Callbacks ---
 	const switchTab = useCallback((newTab: Tab) => {
 		if (settingsRef.current?.checkUnsaveChanges) {
@@ -152,202 +154,102 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 				setWebSocketState(message.websocketState)
 			}
 
+			// Remove old E2EE message handling logic - WsClient handles this now
 			// --- E2EE Message Handling ---
-			if (message.type === "pairingChallenge") {
-				console.log("Received pairing challenge from extension.")
-				if (pairingStatus === "pairing") {
-					if (message.extensionPublicKey && message.verificationValue) {
-						setExtensionPublicKey(message.extensionPublicKey)
-						setChallengeVerificationValue(message.verificationValue)
-						setPairingStatus("awaitingCode")
-						setPairingError(null) // Clear previous errors
-						console.log("Stored challenge values, awaiting user code input.")
-					} else {
-						console.error("Invalid pairing challenge received:", message)
-						setPairingError("Invalid pairing challenge received from extension.")
-						setPairingStatus("error")
-					}
-				} else {
-					console.warn("Received pairing challenge but not in 'pairing' state.")
-				}
-			}
-
-			if (message.type === "pairingStatus") {
-				if (message.status === "paired") {
-					console.log("Received confirmation: Pairing successful.")
-					setPairingStatus("paired")
-					setPairingError(null)
-					// Keys should already be stored in localStorage by handleVerifyCodeClick
-					initiateSessionKeyExchange() // Initiate exchange after confirmation
-					// TODO: Initiate session key exchange here
-				} else {
-					// Handle other potential statuses if needed (e.g., error from extension)
-					console.error("Received non-paired status:", message.status)
-					setPairingError(`Pairing failed on extension side: ${message.status || "Unknown error"}`)
-					setPairingStatus("error")
-				}
-			}
+			// if (message.type === "pairingChallenge") { ... }
+			// if (message.type === "pairingStatus") { ... }
 			// --- E2EE Message Handling End ---
 
-			// --- E2EE Session Key Handling ---
-			if (message.type === "sessionAck") {
-				console.log("Received sessionAck from extension.")
-				if (pairingStatus === "paired" && webviewKeys.privateKey && message.extensionPublicKey) {
-					calculateClientSharedSecret(
-						webviewKeys.privateKey,
-						webviewKeys.publicKey!, // Should exist if private key exists
-						message.extensionPublicKey,
-					)
-						.then((secret) => {
-							console.log("Session shared secret calculated.")
-							setSessionSharedSecret(secret)
-							// TODO: Now we can start encrypting messages
-						})
-						.catch((err) => {
-							console.error("Failed to calculate session shared secret:", err)
-							setPairingError("Failed to establish secure session.")
-							setPairingStatus("error") // Revert to error state if session fails
-							setSessionSharedSecret(null)
-						})
-				} else {
-					console.warn("Received sessionAck but not in correct state or missing keys.")
-				}
-			}
+			// Remove old session key handling logic
 			// --- E2EE Session Key Handling End ---
 		},
-		[switchTab, pairingStatus, webviewKeys.privateKey, webviewKeys.publicKey], // Add key dependencies
+		[switchTab], // Remove old E2EE state dependencies
 	)
 
-	// --- E2EE Pairing Handlers ---
-	const handlePairClick = useCallback(async () => {
-		if (!isSodiumReady) {
-			setPairingError("Encryption library not ready.")
-			setPairingStatus("error")
-			return
-		}
-		setPairingStatus("pairing")
+	// --- E2EE Pairing Handlers (New) ---
+	const handleInitiatePairingClick = useCallback(() => {
+		console.log("Initiate pairing button clicked.")
+		setIsInitiatingPairing(true)
 		setPairingError(null)
+		// Send message to extension to start the process
+		vscode.postMessage({ type: "initiatePairing" })
+		// The extension will respond by generating a code and sending the 'start' message,
+		// which will trigger the state change to 'pairing' via the WsClient listener.
+		// Add a timeout in case the extension doesn't respond?
+		setTimeout(() => setIsInitiatingPairing(false), 5000) // Re-enable button after 5s if no response
+	}, [])
+
+	const handleSubmitCodeClick = useCallback(async () => {
+		if (!client) {
+			setPairingError("WebSocket client not available.")
+			return
+		}
+		if (pairingState !== "pairing") {
+			console.warn("Attempted to submit code outside of pairing state.")
+			return
+		}
+		if (pairingCodeInput.length !== 6) {
+			setPairingError("Pairing code must be 6 digits.")
+			return
+		}
+
+		setPairingError(null) // Clear previous errors
+		console.log("Submitting pairing code:", pairingCodeInput)
 		try {
-			console.log("Generating webview key pair...")
-			const keys = await generateKeyPair()
-			setWebviewKeys(keys)
-			localStorage.setItem(WEBVIEW_PRIVATE_KEY_LS, keys.privateKey) // Store private key
-			console.log("Webview keys generated and private key stored.")
-			vscode.postMessage({ type: "pairingRequest", text: keys.publicKey })
-			console.log("Sent pairing request to extension.")
+			// WsClient handles the crypto and sending the 'exchange' message
+			await client.submitPairingCode(pairingCodeInput)
+			// State remains 'pairing' until 'complete' message is received from extension
+			console.log("'exchange' message sent, waiting for 'complete' confirmation...")
+			// Optionally add a 'verifying' visual state here if desired
 		} catch (err) {
-			console.error("Error during key generation or pairing request:", err)
-			setPairingError(`Failed to initiate pairing: ${err instanceof Error ? err.message : String(err)}`)
-			setPairingStatus("error")
-			setWebviewKeys({ publicKey: null, privateKey: null }) // Clear keys on error
-			localStorage.removeItem(WEBVIEW_PRIVATE_KEY_LS) // Remove potentially stored key
+			console.error("Error submitting pairing code via WsClient:", err)
+			setPairingError(`Failed to submit code: ${err instanceof Error ? err.message : String(err)}`)
+			// WsClient might reset state on error, or we can do it here
+			// setPairingState("error"); // Reflect error locally
 		}
-	}, [isSodiumReady])
-
-	const handleVerifyCodeClick = useCallback(async () => {
-		if (!isSodiumReady) {
-			setPairingError("Encryption library not ready.")
-			setPairingStatus("error")
-			return
-		}
-		if (!webviewKeys.publicKey || !extensionPublicKey || !challengeVerificationValue) {
-			setPairingError("Missing necessary information for verification.")
-			setPairingStatus("error") // Or back to 'unpaired'? Error seems more appropriate.
-			return
-		}
-
-		setPairingStatus("verifying")
-		setPairingError(null)
-
-		try {
-			console.log("Calculating verification value...")
-			const calculatedValue = await calculateVerificationValue(
-				webviewKeys.publicKey,
-				extensionPublicKey,
-				pairingCodeInput,
-			)
-			console.log("Calculated:", calculatedValue, "Expected:", challengeVerificationValue)
-
-			if (calculatedValue === challengeVerificationValue) {
-				console.log("Verification successful!")
-				// Store extension public key permanently
-				localStorage.setItem(EXTENSION_PUBLIC_KEY_LS, extensionPublicKey)
-				// Send success message to extension
-				vscode.postMessage({ type: "pairingSuccess" })
-				// Update state - extension will confirm with pairingStatus message
-				// setPairingStatus("paired") // Let extension confirm via message
-				setPairingCodeInput("")
-				setChallengeVerificationValue(null)
-				console.log("Stored extension public key and sent success message.")
-			} else {
-				console.warn("Verification failed: Codes do not match.")
-				setPairingError("Invalid pairing code. Please try again.")
-				setPairingStatus("awaitingCode") // Allow retry
-				setPairingCodeInput("") // Clear input for retry
-			}
-		} catch (err) {
-			console.error("Error during verification:", err)
-			setPairingError(`Verification failed: ${err instanceof Error ? err.message : String(err)}`)
-			setPairingStatus("error") // Or back to 'awaitingCode'? Error seems safer.
-		}
-	}, [
-		isSodiumReady,
-		webviewKeys.publicKey,
-		extensionPublicKey,
-		pairingCodeInput,
-		challengeVerificationValue,
-	])
-
-	// --- E2EE Session Key Exchange ---
-	const initiateSessionKeyExchange = useCallback(async () => {
-		if (pairingStatus !== "paired" || !webviewKeys.publicKey || !extensionPublicKey || !isSodiumReady) {
-			console.warn("Cannot initiate session key exchange: Not paired or keys/sodium not ready.")
-			return
-		}
-		console.log("Initiating session key exchange...")
-		// In this simple model, we just send the long-term public key again.
-		// More complex protocols might use ephemeral keys for the exchange itself.
-		vscode.postMessage({ type: "sessionHello", text: webviewKeys.publicKey })
-	}, [pairingStatus, webviewKeys.publicKey, extensionPublicKey, isSodiumReady])
-	// --- E2EE Session Key Exchange End ---
+	}, [client, pairingState, pairingCodeInput])
+	// Remove old handlers: handlePairClick, handleVerifyCodeClick, initiateSessionKeyExchange
 
 	// --- Effects ---
 	useEvent("message", onMessage) // Register message handler
 
-	// Initialize Sodium
+	// Remove old Sodium init and key loading effects - WsClient handles this internally
+	// useEffect(() => { initializeSodium()... }, [])
+	// useEffect(() => { load keys from localStorage... }, [isSodiumReady])
+
+	// Effect to listen to WsClient pairing events
 	useEffect(() => {
-		initializeSodium()
-			.then(() => {
-				console.log("Sodium initialized in MainAppView.")
-				setIsSodiumReady(true)
-			})
-			.catch((err) => {
-				console.error("Failed to initialize Sodium:", err)
-				setPairingError("Failed to initialize encryption library.")
-				setPairingStatus("error")
-			})
-	}, [])
+		if (!client) return
 
-	// Load E2EE keys from local storage on mount if Sodium is ready
-	useEffect(() => {
-		if (!isSodiumReady) return
-
-		console.log("Checking for existing E2EE keys in localStorage...")
-		const storedPrivateKey = localStorage.getItem(WEBVIEW_PRIVATE_KEY_LS)
-		const storedExtensionPublicKey = localStorage.getItem(EXTENSION_PUBLIC_KEY_LS)
-
-		if (storedPrivateKey && storedExtensionPublicKey) {
-			console.log("Found existing keys. Setting state to 'paired'.")
-			// TODO: Validate keys?
-			setWebviewKeys((prev) => ({ ...prev, privateKey: storedPrivateKey }))
-			setExtensionPublicKey(storedExtensionPublicKey)
-			setPairingStatus("paired")
-			initiateSessionKeyExchange() // Initiate exchange when keys are loaded
-		} else {
-			console.log("No existing keys found or keys incomplete. Status remains 'unpaired'.")
-			setPairingStatus("unpaired") // Ensure status is unpaired if keys aren't found
+		const handlePairingStatusChange = (event: Event) => {
+			const newStatus = (event as CustomEvent).detail as PairingState
+			console.log("WsClient pairing status changed:", newStatus)
+			setPairingState(newStatus)
+			setPairingError(null) // Clear error on status change
+			if (newStatus !== "pairing") {
+				setPairingCodeInput("") // Clear code input if not in pairing mode
+			}
 		}
-	}, [isSodiumReady]) // Run when sodium is ready
+
+		const handleE2eeError = (event: Event) => {
+			const error = (event as CustomEvent).detail as Error
+			console.error("WsClient E2EE Error:", error)
+			setPairingError(error.message || "An unknown pairing error occurred.")
+			setPairingState("error") // Set local state to error
+		}
+
+		client.on("pairing_status_changed", handlePairingStatusChange)
+		client.on("e2ee_error", handleE2eeError)
+
+		// Get initial state in case event was missed before listener attached
+		// TODO: Add a method to WsClient to get current pairing state?
+		// For now, rely on initial state set by initializeE2EE in WsClient constructor
+
+		return () => {
+			client.off("pairing_status_changed", handlePairingStatusChange)
+			client.off("e2ee_error", handleE2eeError)
+		}
+	}, [client])
 
 	// Announcement Effect
 	useEffect(() => {
@@ -375,12 +277,14 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 				client.setAuthToken(token)
 			} else {
 				// If token isn't immediately available, get it from headers
-				getAuthHeaders().then((headers) => {
-					const authToken = headers.Authorization?.split(" ")[1]
-					if (authToken) {
-						client.setAuthToken(authToken)
-					}
-				})
+				getAuthHeaders()
+					.then((headers) => {
+						const authToken = headers.Authorization?.split(" ")[1]
+						if (authToken) {
+							client.setAuthToken(authToken)
+						}
+					})
+					.catch((err) => console.error("Error getting auth headers:", err))
 			}
 
 			// Ensure the mock vscode has the client reference and call setWsClient
@@ -400,38 +304,49 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 			<NavigationBar activeTab={tab} onTabChange={switchTab} user={user} webSocketState={webSocketState} />
 			<div className="flex-1 overflow-auto p-4"> {/* Added padding for pairing UI */}
 				{/* E2EE Pairing UI */}
+				{/* Updated E2EE Pairing UI */}
 				<div className="mb-4 p-2 border rounded bg-secondary/10">
-					<h3 className="text-lg font-semibold mb-2">End-to-End Encryption Status</h3>
-					<p className="mb-2">Status: <span className="font-mono">{pairingStatus}</span></p>
+					<h3 className="text-lg font-semibold mb-2">End-to-End Encryption</h3>
+					<p className="mb-2">
+						Status: <span className="font-mono font-semibold">{pairingState}</span>
+					</p>
 					{pairingError && <p className="text-red-500 mb-2">Error: {pairingError}</p>}
 
-					{pairingStatus === "unpaired" && (
-						<Button onClick={handlePairClick} disabled={!isSodiumReady}>
-							Pair with Extension
-						</Button>
-					)}
-
-					{pairingStatus === "pairing" && <p>Generating keys and contacting extension...</p>}
-
-					{pairingStatus === "awaitingCode" && (
-						<div className="flex items-center gap-2">
-							<Input
-								type="text"
-								placeholder="Enter 6-digit code from VS Code"
-								value={pairingCodeInput}
-								onChange={(e) => setPairingCodeInput(e.target.value)}
-								maxLength={6}
-								className="w-48"
-							/>
-							<Button onClick={handleVerifyCodeClick} disabled={pairingCodeInput.length !== 6}>
-								Verify Code
-							</Button>
+					{/* Show pairing instructions/input only when pairing is active */}
+					{pairingState === "pairing" && (
+						<div className="flex flex-col gap-2">
+							<p>Enter the 6-digit code displayed in VS Code:</p>
+							<div className="flex items-center gap-2">
+								<Input
+									type="text"
+									placeholder="Pairing Code"
+									value={pairingCodeInput}
+									onChange={(e) => setPairingCodeInput(e.target.value.replace(/[^0-9]/g, ""))} // Allow only digits
+									maxLength={6}
+									className="w-32"
+									aria-label="Pairing Code Input"
+								/>
+								<Button onClick={handleSubmitCodeClick} disabled={pairingCodeInput.length !== 6}>
+									Submit Code
+								</Button>
+							</div>
 						</div>
 					)}
 
-					{pairingStatus === "verifying" && <p>Verifying code...</p>}
+					{/* Indicate paired status */}
+					{pairingState === "paired" && <p className="text-green-500">Secure connection established.</p>}
 
-					{pairingStatus === "paired" && <p className="text-green-500">Successfully paired!</p>}
+					{/* Button to initiate pairing from Web UI */}
+					{pairingState === "unpaired" && (
+						<Button onClick={handleInitiatePairingClick} disabled={isInitiatingPairing}>
+							{isInitiatingPairing ? "Initiating..." : "Pair with Extension"}
+						</Button>
+					)}
+
+					{/* Show error state clearly */}
+					{pairingState === "error" && (
+						<Button onClick={handleInitiatePairingClick}>Retry Pairing</Button> // Allow retry from error state
+					)}
 				</div>
 				{/* End E2EE Pairing UI */}
 
@@ -445,8 +360,9 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 					showAnnouncement={showAnnouncement}
 					hideAnnouncement={() => setShowAnnouncement(false)}
 					showHistoryView={() => switchTab("history")}
-					sessionSharedSecret={sessionSharedSecret} // Pass down E2EE secret
-					isSodiumReady={isSodiumReady} // Pass down sodium status
+					// Remove old E2EE props from ChatView for now
+					// sessionSharedSecret={sessionSharedSecret}
+					// isSodiumReady={isSodiumReady}
 				/>
 			</div>
 			<HumanRelayDialog

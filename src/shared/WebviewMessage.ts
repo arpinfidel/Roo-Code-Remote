@@ -131,6 +131,7 @@ export interface WebviewMessage {
 		| "pairingSuccess" // E2EE: Webview confirms successful verification
 		| "sessionHello" // E2EE: Webview initiates session key exchange
 		| "encryptedMessage" // E2EE: Contains encrypted payload
+		| "initiatePairing" // E2EE: Webview requests extension to start pairing
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse

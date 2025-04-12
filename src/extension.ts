@@ -135,14 +135,18 @@ export async function activate(context: vscode.ExtensionContext) {
 			return // Or throw an error
 		}
 
-		webSocketAdapter = new WebSocketApiAdapter(api, {
-			serverUrl: config.get("websocket.serverUrl") || "",
-			provider: provider, // Pass the provider instance
-			reconnectInterval: config.get("websocket.reconnectInterval", 5000),
-			maxRetries: config.get("websocket.maxRetries", 5),
-			sessionId: sessionId,
-			clientType: "extension",
-		})
+		webSocketAdapter = new WebSocketApiAdapter(
+			api,
+			{
+				serverUrl: config.get("websocket.serverUrl") || "",
+				provider: provider, // Pass the provider instance
+				reconnectInterval: config.get("websocket.reconnectInterval", 5000),
+				maxRetries: config.get("websocket.maxRetries", 5),
+				sessionId: sessionId,
+				clientType: "extension",
+			},
+			context, // Pass the extension context
+		)
 
 		// Set the adapter instance on the provider
 		provider.setWebSocketAdapter(webSocketAdapter)
@@ -161,6 +165,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		)
 
 		provider.on("messageToWebview", webSocketAdapter.forwardMessageEvent.bind(webSocketAdapter))
+
+		// Command registration removed - pairing will be initiated from Web UI button
 	}
 
 	context.subscriptions.push(

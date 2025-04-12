@@ -221,6 +221,15 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		}
 		// --- E2EE Session Key Exchange End ---
 
+		case "initiatePairing": // Handle request from Web UI button
+			if (provider.webSocketAdapter) {
+				provider.webSocketAdapter.initiatePairing()
+			} else {
+				provider.outputChannel.appendLine("Error: Received initiatePairing request but WebSocket adapter is not available.")
+				// Optionally send an error back to the webview?
+			}
+			break
+
 		// Existing cases below...
 		case "webviewDidLaunch":
 			// Load custom modes first
