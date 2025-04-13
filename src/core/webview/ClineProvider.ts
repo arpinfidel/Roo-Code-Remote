@@ -11,6 +11,7 @@ import * as vscode from "vscode"
 
 import { GlobalState, ProviderSettings, RooCodeSettings } from "../../schemas"
 import { t } from "../../i18n"
+import { PairingState } from "../../services/e2ee/pairing" // Import PairingState
 import { setPanel } from "../../activate/registerCommands"
 import {
 	ApiConfiguration,
@@ -92,6 +93,7 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 	public readonly providerSettingsManager: ProviderSettingsManager
 	public readonly customModesManager: CustomModesManager
 	private firebaseIdToken: string | null = null // Add property to store Firebase ID token
+	// Make public to allow adapter access in extension.ts and message handler
 	public webSocketAdapter?: WebSocketApiAdapter // Add property to hold the adapter instance
 
 	constructor(
@@ -1519,7 +1521,32 @@ export class ClineProvider extends EventEmitter<ClineProviderEvents> implements 
 
 	// Method for WebSocketApiAdapter to notify provider of state changes
 	public notifyWebSocketStateChange(state: WebSocketState) {
-		this.log(`WebSocket state changed: ${state}`)
-		this.emit("websocketStateChange", state)
+		this.emit("websocketStateChange", state) // Forward the event
 	}
+
+	// --- E2EE Status Notifications ---
+
+	public notifyPairingStateChange(state: PairingState) {
+		this.outputChannel.appendLine(`E2EE Pairing State: ${state}`)
+		this.postMessageToWebview({ type: "e2eeState", state })
+	}
+
+	public notifyPairingCode(code: string) {
+		this.outputChannel.appendLine(`E2EE Pairing Code: ${code}`)
+		// Display code in VS Code UI as well for comparison
+		vscode.window.showInformationMessage(`Pairing Code: ${code}\nCompare this code on your other device.`, { modal: true });
+		this.postMessageToWebview({ type: "e2eeCode", code })
+	}
+
+	public notifyPaired(peerKey: string) {
+		this.outputChannel.appendLine(`E2EE Paired with peer: ${peerKey.substring(0, 10)}...`)
+		vscode.window.showInformationMessage("Devices successfully paired.");
+		this.postMessageToWebview({ type: "e2eePaired", peerKey })
+	}
+
+	public notifyUnpaired() {
+		this.outputChannel.appendLine(`E2EE Unpaired`)
+		this.postMessageToWebview({ type: "e2eeUnpaired" })
+	}
+	// Removed erroneous lines 1551-1553
 }

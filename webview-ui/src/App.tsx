@@ -4,6 +4,7 @@ import { FirebaseProvider, useFirebase } from "./context/FirebaseContext"
 import { useAuthToken } from "./components/ui/hooks/useAuthToken"
 
 import { useEvent } from "react-use"
+import PairingModal from "./components/PairingModal" // Import the modal
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
 	BrowserRouter,
@@ -62,14 +63,15 @@ if (typeof acquireVsCodeApi === "undefined") {
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 type WebSocketState = "connecting" | "connected" | "disconnected" | "error"
 
-const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]>, Tab>> = {
-	chatButtonClicked: "chat",
-	settingsButtonClicked: "settings",
-	promptsButtonClicked: "prompts",
-	mcpButtonClicked: "mcp",
-	historyButtonClicked: "history",
-	plusButtonClicked: "chat",
-}
+// Commenting out as 'action' is no longer a top-level property in the discriminated union
+// const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]>, Tab>> = {
+// 	chatButtonClicked: "chat",
+// 	settingsButtonClicked: "settings",
+// 	promptsButtonClicked: "prompts",
+// 	mcpButtonClicked: "mcp",
+// 	historyButtonClicked: "history",
+// 	plusButtonClicked: "chat",
+// };
 
 const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 	const [tab, setTab] = useState<Tab>("chat")
@@ -102,17 +104,26 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 			const message: ExtensionMessage = e.data
 
 			// Handle tab switching messages
-			if (message.type === "action" && message.action) {
-				const newTab = tabsByMessageAction[message.action]
-				if (newTab) {
-					switchTab(newTab)
-				}
-			}
+			// Handle tab switching based on message type if needed, or remove if not used
+			// Example: if (message.type === 'someTypeThatImpliesTabSwitch') { switchTab('desiredTab'); }
+			// For now, commenting out the old logic based on 'action'
+			// if (message.type === "action" && message.action) {
+			// 	const newTab = tabsByMessageAction[message.action]
+			// 	if (newTab) {
+			// 		switchTab(newTab)
+			// 	}
+			// }
 
 			// Handle human relay dialog messages
-			if (message.type === "showHumanRelayDialog" && message.requestId && message.promptText) {
-				const { requestId, promptText } = message
-				setHumanRelayDialogState({ isOpen: true, requestId, promptText })
+			if (message.type === "showHumanRelayDialog" && message.requestId && message.values) {
+				const { requestId, values } = message;
+				// Extract promptText from values, assuming it exists there
+				const promptText = values?.promptText as string | undefined;
+				if (promptText) {
+					setHumanRelayDialogState({ isOpen: true, requestId, promptText });
+				} else {
+					console.warn("Received showHumanRelayDialog without promptText in values");
+				}
 			}
 
 			// Handle WebSocket state updates
@@ -120,7 +131,7 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 				setWebSocketState(message.websocketState)
 			}
 		},
-		[switchTab], // Keep dependencies minimal, state setters are stable
+		[], // Remove switchTab dependency as state setters are stable
 	)
 	useEvent("message", onMessage) // Register message handler here
 
@@ -146,29 +157,32 @@ const MainAppView: React.FC<{ user: any }> = ({ user }) => {
 			const wsUrl = process.env.WS_URL || "ws://localhost:8080/ws"
 			console.log(`MainAppView Standalone mode, connecting to ${wsUrl}`)
 
-			client.setClientType("webui")
-			client.setSessionId(standaloneSessionId) // Set session ID from URL param
-			client.setURL(wsUrl)
+			// Configuration is now passed during EncryptedWsClient construction in ws-context.
+			// Auth token is set via client.setAuthToken() within the connect function in ws-context.
+			// Remove the old set* calls here.
+			// client.setClientType("webui") // Removed
+			// client.setSessionId(standaloneSessionId) // Removed - Handled in ws-context constructor
+			// client.setURL(wsUrl) // Removed - Handled in ws-context constructor
 
-			// Set auth token if available
-			if (token) {
-				client.setAuthToken(token)
-			} else {
-				// If token isn't immediately available, get it from headers
-				getAuthHeaders().then((headers) => {
-					const authToken = headers.Authorization?.split(" ")[1]
-					if (authToken) {
-						client.setAuthToken(authToken)
-					}
-				})
-			}
+			// Auth token setting is handled within the connect function in ws-context
+			// if (token) {
+			// 	client.setAuthToken(token) // Removed
+			// } else {
+			// 	getAuthHeaders().then((headers) => {
+			// 		const authToken = headers.Authorization?.split(" ")[1]
+			// 		if (authToken) {
+			// 			client.setAuthToken(authToken) // Removed
+			// 		}
+			// 	})
+			// }
 
 			// Ensure the mock vscode has the client reference and call setWsClient
 			if (window.vscode && typeof (window.vscode as MockVscode).setWsClient === "function") {
 				;(window.vscode as MockVscode).setWsClient!(client) // Use non-null assertion if sure it exists
 			}
 
-			connect(wsUrl)
+			// Connect call no longer takes URL argument
+			connect()
 				.then(() => console.log("MainAppView: WebSocket connection successful"))
 				.catch((err) => console.error("MainAppView: WebSocket connection not successful:", err))
 		}
@@ -290,6 +304,7 @@ const AppWithProviders = () => {
 						<WsProvider>
 							<FirebaseProvider>
 								<App />
+								<PairingModal /> {/* Render the modal */}
 							</FirebaseProvider>
 						</WsProvider>
 					</QueryClientProvider>

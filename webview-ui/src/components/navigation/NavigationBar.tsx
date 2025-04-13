@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { PlusIcon, HistoryIcon, SettingsIcon } from "../icons"
 import { vscode } from "../../utils/vscode"
 import { useFirebase } from "../../context/FirebaseContext"
+import { useWs } from "../../context/ws-context" // Import WS context
 
 type Tab = "settings" | "history" | "mcp" | "prompts" | "chat"
 
@@ -16,8 +17,9 @@ type NavigationBarProps = {
 
 export const NavigationBar = ({ activeTab, onTabChange, user, webSocketState }: NavigationBarProps) => {
 	const { auth } = useFirebase()
-	const isStandalone = typeof acquireVsCodeApi === "undefined" // Added check
+	const isStandalone = typeof acquireVsCodeApi === "undefined"
 	const navigate = useNavigate()
+	const { pairingState, initiatePairing } = useWs() // Get pairing state and function
 
 	return (
 		<div className="flex items-center justify-between p-2 border-b border-vscode-panel-border bg-vscode-panel-background">
@@ -81,6 +83,41 @@ export const NavigationBar = ({ activeTab, onTabChange, user, webSocketState }: 
 						</span>
 					</button>
 				)}
+
+				{/* E2EE Pairing Button/Indicator */}
+				<button
+					className={`p-2 rounded text-xs ${
+						pairingState === 'paired' ? 'bg-green-600 text-white' :
+						pairingState === 'awaiting-confirmation' || pairingState === 'confirming' ? 'bg-yellow-500 text-black' :
+						pairingState === 'initiating' ? 'bg-blue-500 text-white' :
+						'hover:bg-vscode-button-secondaryHoverBackground text-vscode-foreground' // Unpaired state
+					}`}
+					onClick={() => {
+						if (pairingState === 'unpaired') {
+							initiatePairing().catch(err => {
+								console.error("Failed to initiate pairing:", err);
+								// TODO: Show error to user
+							});
+						}
+						// No action needed for other states from this button
+					}}
+					title={
+						pairingState === 'paired' ? 'Devices Paired' :
+						pairingState === 'awaiting-confirmation' ? 'Awaiting Confirmation' :
+						pairingState === 'confirming' ? 'Confirming...' :
+						pairingState === 'initiating' ? 'Initiating Pairing...' :
+						'Pair Device' // Unpaired state
+					}
+					disabled={pairingState !== 'unpaired'} // Only clickable when unpaired
+				>
+					{
+						pairingState === 'paired' ? 'Paired' :
+						pairingState === 'awaiting-confirmation' ? 'Confirm Code' :
+						pairingState === 'confirming' ? 'Confirming' :
+						pairingState === 'initiating' ? 'Pairing...' :
+						'Pair Device' // Unpaired state
+					}
+				</button>
 				<button
 					className={`p-2 rounded hover:bg-vscode-button-secondaryHoverBackground ${activeTab === "settings" ? "text-vscode-button-foreground bg-vscode-button-secondaryBackground" : "text-vscode-foreground"}`}
 					onClick={() => onTabChange("settings")}

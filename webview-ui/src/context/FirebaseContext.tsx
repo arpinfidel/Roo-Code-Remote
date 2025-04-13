@@ -24,6 +24,7 @@ interface FirebaseContextValue {
 	user: User | null
 	isAuthenticated: boolean
 	authChecked: boolean
+	idToken: string | null // Add idToken state
 }
 
 const FirebaseContext = createContext<FirebaseContextValue | null>(null)
@@ -33,6 +34,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 	const [user, setUser] = useState<User | null>(null)
 	const [isAuthenticated, setIsAuthenticated] = useState(false)
 	const [authChecked, setAuthChecked] = useState(false)
+	const [idToken, setIdToken] = useState<string | null>(null) // State for ID token
 
 	useEffect(() => {
 		// Initialize Firebase
@@ -51,6 +53,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 				currentUser
 					.getIdToken(true)
 					.then((idToken) => {
+						setIdToken(idToken); // Store token in state
 						vscode.postMessage({ type: "firebaseIdToken", text: idToken })
 					})
 					.catch((error) => {
@@ -59,17 +62,18 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 			} else {
 				console.log("User not authenticated")
 				// Optionally send a null token or clear message
+				setIdToken(null); // Clear token state
 				vscode.postMessage({ type: "firebaseIdToken", text: "" })
 			}
 		})
 
-		setFirebase({ app, analytics, auth, user, isAuthenticated, authChecked })
+		setFirebase({ app, analytics, auth, user, isAuthenticated, authChecked, idToken })
 
 		return () => {
 			// Cleanup auth listener on unmount
 			unsubscribe()
 		}
-	}, [authChecked, isAuthenticated, user])
+	}, [authChecked, isAuthenticated, user, idToken]) // Add idToken dependency
 
 	useEvent("message", (event: MessageEvent) => {
 		const data: ExtensionMessage = event.data
@@ -84,6 +88,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 						userCredential.user
 							.getIdToken(true)
 							.then((idToken) => {
+								setIdToken(idToken); // Store token in state
 								vscode.postMessage({ type: "firebaseIdToken", text: idToken })
 							})
 							.catch((error) => {
@@ -95,6 +100,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 						console.log("error logging in with custom token", error.code)
 						console.log("error logging in with custom token", error.message)
 						// Optionally send a null token or error message
+						setIdToken(null); // Clear token state
 						vscode.postMessage({ type: "firebaseIdToken", text: "" })
 					})
 			}
@@ -109,9 +115,10 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 				user,
 				isAuthenticated,
 				authChecked,
+				idToken, // Include idToken in updated context value
 			})
 		}
-	}, [user, isAuthenticated, authChecked, firebase])
+	}, [user, isAuthenticated, authChecked, firebase, idToken]) // Add idToken dependency
 
 	if (!firebase) {
 		return null // Or loading indicator

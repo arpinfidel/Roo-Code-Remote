@@ -2,7 +2,8 @@ import { v4 as uuidv4 } from "uuid"
 
 type WsStatus = "disconnected" | "connecting" | "connected"
 
-interface WsMessage {
+// Export WsMessage interface
+export interface WsMessage {
 	id: string
 	type: string
 	action?: string
@@ -24,22 +25,24 @@ export class WsClient {
 	private authToken: string | null = null
 	private connectingPromise: Promise<void> | null = null
 
-	setURL(url: string) {
+	setURL(url: string): this { // Return this for chaining
 		this.url = new URL(url)
 		return this
 	}
 
-	setClientType(type: "webui" | "extension") {
+	setClientType(type: "webui" | "extension"): this { // Return this
 		this.clientType = type
 		return this
 	}
 
-	setSessionId(sessionId: string | null) {
+	setSessionId(sessionId: string | null): this { // Return this
 		this.sessionId = sessionId
+		return this
 	}
 
-	setAuthToken(token: string | null) {
+	setAuthToken(token: string | null): this { // Return this
 		this.authToken = token
+		return this
 	}
 
 	on(event: WsEvent, listener: (event: CustomEvent) => void) {

@@ -59,7 +59,12 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				vscode.window.showErrorMessage("Cannot connect WebSocket: Adapter not initialized.")
 			}
 			break
-
+		case "initiatePairing":
+			provider.webSocketAdapter?.initiatePairing();
+			break;
+		case "confirmPairing":
+			provider.webSocketAdapter?.confirmPairing();
+			break;
 		// Existing cases below...
 		case "webviewDidLaunch":
 			// Load custom modes first
@@ -663,7 +668,8 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		case "playTts":
 			if (message.text) {
 				playTts(message.text, {
-					onStart: () => provider.postMessageToWebview({ type: "ttsStart", text: message.text }),
+					// Ensure text is provided for ttsStart
+					onStart: () => { if (message.text) provider.postMessageToWebview({ type: "ttsStart", text: message.text }) },
 					onStop: () => provider.postMessageToWebview({ type: "ttsStop", text: message.text }),
 				})
 			}
@@ -717,7 +723,8 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						type: "browserConnectionResult",
 						success: !!chromeHostUrl,
 						text: `Auto-discovered and tested connection to Chrome: ${chromeHostUrl}`,
-						values: { endpoint: chromeHostUrl },
+						// Remove 'values' as it's not part of browserConnectionResult type
+						// endpoint: chromeHostUrl, // If needed, add 'endpoint' property to the specific type in ExtensionMessage.ts
 					})
 				} else {
 					await provider.postMessageToWebview({
@@ -1017,9 +1024,8 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						`Error enhancing prompt: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
 					)
 					vscode.window.showErrorMessage(t("common:errors.enhance_prompt"))
-					await provider.postMessageToWebview({
-						type: "enhancedPrompt",
-					})
+					// The postMessageToWebview call was already present on line 1015,
+					// the following lines were added erroneously by the previous diff and are now removed.
 				}
 			}
 			break
@@ -1030,7 +1036,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				await provider.postMessageToWebview({
 					type: "systemPrompt",
 					text: systemPrompt,
-					mode: message.mode,
+					// Remove 'mode' as it's not part of systemPrompt type
 				})
 			} catch (error) {
 				provider.outputChannel.appendLine(
@@ -1075,11 +1081,11 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 
 			if (!workspacePath) {
 				// Handle case where workspace path is not available
+				// Send specific error message type
 				await provider.postMessageToWebview({
-					type: "fileSearchResults",
-					results: [],
-					requestId: message.requestId,
+					type: "fileSearchError",
 					error: "No workspace path available",
+					requestId: message.requestId, // Include requestId if available
 				})
 				break
 			}
@@ -1095,17 +1101,17 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				await provider.postMessageToWebview({
 					type: "fileSearchResults",
 					results,
-					requestId: message.requestId,
+					// Remove 'requestId' as it's not part of fileSearchResults type
 				})
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error)
 
 				// Send error response to webview
+				// Send specific error message type
 				await provider.postMessageToWebview({
-					type: "fileSearchResults",
-					results: [],
+					type: "fileSearchError",
 					error: errorMessage,
-					requestId: message.requestId,
+					requestId: message.requestId, // Include requestId if available
 				})
 			}
 			break

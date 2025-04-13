@@ -16,6 +16,7 @@ import {
 import { McpServer } from "./mcp"
 import { GitCommit } from "../utils/git"
 import { Mode } from "./modes"
+import { PairingState } from "../services/e2ee/pairing" // Import PairingState
 
 export type { ApiConfigMeta, ToolProgressStatus }
 
@@ -31,96 +32,61 @@ export interface LanguageModelChatSelector {
 // 'settingsButtonClicked' or 'hello'. Webview will hold state.
 export type WebSocketState = "connecting" | "connected" | "disconnected" | "error"
 
-export interface ExtensionMessage {
-	type:
-		| "action"
-		| "state"
-		| "selectedImages"
-		| "ollamaModels"
-		| "lmStudioModels"
-		| "theme"
-		| "workspaceUpdated"
-		| "invoke"
-		| "partialMessage"
-		| "openRouterModels"
-		| "glamaModels"
-		| "unboundModels"
-		| "requestyModels"
-		| "openAiModels"
-		| "mcpServers"
-		| "enhancedPrompt"
-		| "commitSearchResults"
-		| "listApiConfig"
-		| "vsCodeLmModels"
-		| "vsCodeLmApiAvailable"
-		| "requestVsCodeLmModels"
-		| "updatePrompt"
-		| "systemPrompt"
-		| "autoApprovalEnabled"
-		| "updateCustomMode"
-		| "deleteCustomMode"
-		| "currentCheckpointUpdated"
-		| "showHumanRelayDialog"
-		| "humanRelayResponse"
-		| "humanRelayCancel"
-		| "browserToolEnabled"
-		| "browserConnectionResult"
-		| "remoteBrowserEnabled"
-		| "ttsStart"
-		| "ttsStop"
-		| "maxReadFileLine"
-		| "fileSearchResults"
-		| "toggleApiConfigPin"
-		| "setToken"
-		| "websocketState"
-	text?: string
-	action?:
-		| "chatButtonClicked"
-		| "mcpButtonClicked"
-		| "settingsButtonClicked"
-		| "historyButtonClicked"
-		| "promptsButtonClicked"
-		| "didBecomeVisible"
-		| "popoutButtonClicked"
-		| "helpButtonClicked"
-		| "plusButtonClicked"
-	invoke?: "newChat" | "sendMessage" | "primaryButtonClick" | "secondaryButtonClick" | "setChatBoxMessage"
-	websocketState?: WebSocketState
-	state?: ExtensionState
-	images?: string[]
-	ollamaModels?: string[]
-	lmStudioModels?: string[]
-	vsCodeLmModels?: { vendor?: string; family?: string; version?: string; id?: string }[]
-	filePaths?: string[]
-	openedTabs?: Array<{
-		label: string
-		isActive: boolean
-		path?: string
-	}>
-	partialMessage?: ClineMessage
-	openRouterModels?: Record<string, ModelInfo>
-	glamaModels?: Record<string, ModelInfo>
-	unboundModels?: Record<string, ModelInfo>
-	requestyModels?: Record<string, ModelInfo>
-	openAiModels?: string[]
-	mcpServers?: McpServer[]
-	commits?: GitCommit[]
-	listApiConfig?: ApiConfigMeta[]
-	mode?: Mode
-	customMode?: ModeConfig
-	slug?: string
-	success?: boolean
-	values?: Record<string, any>
-	requestId?: string
-	promptText?: string
-	results?: Array<{
-		path: string
-		type: "file" | "folder"
-		label?: string
-	}>
-	error?: string
-	credential?: string
+// Base interface for common properties (optional)
+interface BaseExtensionMessage {
+	text?: string;
+	// ... other common optional fields if any
 }
+
+// Define specific message interfaces using discriminated unions
+export type ExtensionMessage = BaseExtensionMessage & (
+	| { type: "action"; action: "chatButtonClicked" | "mcpButtonClicked" | "settingsButtonClicked" | "historyButtonClicked" | "promptsButtonClicked" | "didBecomeVisible" | "popoutButtonClicked" | "helpButtonClicked" | "plusButtonClicked" }
+	| { type: "state"; state: ExtensionState }
+	| { type: "selectedImages"; images: string[] }
+	| { type: "ollamaModels"; ollamaModels: string[] }
+	| { type: "lmStudioModels"; lmStudioModels: string[] }
+	| { type: "theme"; text: string } // Assuming theme is sent as stringified JSON
+	| { type: "workspaceUpdated"; filePaths?: string[]; openedTabs?: Array<{ label: string; isActive: boolean; path?: string }> }
+	| { type: "invoke"; invoke: "newChat" | "sendMessage" | "primaryButtonClick" | "secondaryButtonClick" | "setChatBoxMessage"; text?: string; images?: string[] } // Include text/images for sendMessage
+	| { type: "partialMessage"; partialMessage: ClineMessage }
+	| { type: "openRouterModels"; openRouterModels: Record<string, ModelInfo> }
+	| { type: "glamaModels"; glamaModels: Record<string, ModelInfo> }
+	| { type: "unboundModels"; unboundModels: Record<string, ModelInfo> }
+	| { type: "requestyModels"; requestyModels: Record<string, ModelInfo> }
+	| { type: "openAiModels"; openAiModels: string[] }
+	| { type: "mcpServers"; mcpServers: McpServer[] }
+	| { type: "enhancedPrompt"; text: string }
+	| { type: "commitSearchResults"; commits: GitCommit[] }
+	| { type: "listApiConfig"; listApiConfig: ApiConfigMeta[] }
+	| { type: "vsCodeLmModels"; vsCodeLmModels: LanguageModelChatSelector[] }
+	| { type: "vsCodeLmApiAvailable"; success: boolean }
+	| { type: "requestVsCodeLmModels" } // No payload
+	| { type: "updatePrompt"; promptText: string }
+	| { type: "systemPrompt"; text: string }
+	| { type: "autoApprovalEnabled"; success: boolean } // Assuming payload indicates new state
+	| { type: "updateCustomMode"; customMode: ModeConfig }
+	| { type: "deleteCustomMode"; slug: string }
+	| { type: "currentCheckpointUpdated"; success: boolean } // Or maybe checkpoint data? Adjust as needed.
+	| { type: "showHumanRelayDialog"; requestId: string; values: Record<string, any> }
+	| { type: "humanRelayResponse"; requestId: string; values: Record<string, any> }
+	| { type: "humanRelayCancel"; requestId: string }
+	| { type: "browserToolEnabled"; success: boolean } // Assuming payload indicates new state
+	| { type: "browserConnectionResult"; success: boolean; error?: string }
+	| { type: "remoteBrowserEnabled"; success: boolean } // Assuming payload indicates new state
+	| { type: "ttsStart"; text: string }
+	| { type: "ttsStop" } // No payload
+	| { type: "maxReadFileLine"; success: boolean } // Assuming payload indicates new state
+	| { type: "fileSearchResults"; results: Array<{ path: string; type: "file" | "folder"; label?: string }>; requestId?: string } // Keep requestId optional here for success case
+	| { type: "fileSearchError"; error: string; requestId?: string } // New type for errors
+	| { type: "toggleApiConfigPin"; slug: string; success: boolean }
+	| { type: "setToken"; credential?: string } // Assuming token is passed in credential field
+	| { type: "websocketState"; websocketState: WebSocketState }
+	// E2EE Types
+	| { type: "e2eeState"; state: PairingState }
+	| { type: "e2eeCode"; code: string }
+	| { type: "e2eePaired"; peerKey: string }
+	| { type: "e2eeUnpaired" } // No payload
+);
 
 export type ExtensionState = Pick<
 	GlobalSettings,

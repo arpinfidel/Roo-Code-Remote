@@ -127,6 +127,9 @@ export interface WebviewMessage {
 		| "requestLogin"
 		| "firebaseIdToken"
 		| "connectWebSocket" // Add type for manual connection trigger
+		// E2EE Pairing Actions
+		| "initiatePairing"
+		| "confirmPairing"
 	text?: string
 	disabled?: boolean
 	askResponse?: ClineAskResponse

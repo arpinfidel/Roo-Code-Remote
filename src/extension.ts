@@ -96,6 +96,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			return // Or throw an error
 		}
 
+		// Pass context to adapter for E2EE client initialization
 		webSocketAdapter = new WebSocketApiAdapter(api, {
 			serverUrl: config.get("websocket.serverUrl") || "",
 			provider: provider, // Pass the provider instance
@@ -103,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			maxRetries: config.get("websocket.maxRetries", 5),
 			sessionId: sessionId,
 			clientType: "extension",
-		})
+		}, context) // Pass extensionContext here
 
 		// Set the adapter instance on the provider
 		provider.setWebSocketAdapter(webSocketAdapter)
